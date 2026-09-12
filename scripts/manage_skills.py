@@ -19,10 +19,27 @@ ENV_PATH = ROOT / ".env"
 
 CURRENT_WORKSPACE = None
 
+def ensure_target_gitignore(workspace: Path):
+    """Garante que o .gitignore do projeto externo alvo ignore as junctions .agent/skills/*."""
+    if not workspace or not workspace.exists():
+        return
+    gi = workspace / ".gitignore"
+    rule = "\n# AGY Skill Router Junctions\n.agent/skills/*\n!.agent/skills/.gitkeep\n.agent/.pinned.json\n"
+    try:
+        if gi.exists():
+            content = gi.read_text(encoding="utf-8", errors="ignore")
+            if ".agent/skills" not in content:
+                gi.write_text(content.rstrip() + rule, encoding="utf-8")
+        else:
+            gi.write_text(rule.lstrip(), encoding="utf-8")
+    except Exception:
+        pass
+
 def set_workspace(path: str | Path = None):
     global CURRENT_WORKSPACE
     if path:
         CURRENT_WORKSPACE = Path(path).resolve()
+        ensure_target_gitignore(CURRENT_WORKSPACE)
     else:
         CURRENT_WORKSPACE = None
 
