@@ -111,7 +111,7 @@ class BM25Index:
 
         self.avgdl = total_length / self.N if self.N > 0 else 1.0
 
-    def score(self, query: str, category_filter: str = None) -> list[tuple[float, str, list[str]]]:
+    def score(self, query: str, category_filter: str = None, block_filter: str = None) -> list[tuple[float, str, list[str]]]:
         query_tokens = tokenize(query)
         if not query_tokens:
             return []
@@ -122,6 +122,8 @@ class BM25Index:
         scores = []
         for sid, meta in self.manifest.items():
             if category_filter and meta.get("category") != category_filter:
+                continue
+            if block_filter and meta.get("thematic_block") != block_filter:
                 continue
 
             norm_id = normalize(sid)
@@ -185,16 +187,18 @@ def get_index() -> BM25Index:
         _GLOBAL_INDEX = BM25Index(manifest)
     return _GLOBAL_INDEX
 
-def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = False, category: str = None):
+def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = False, category: str = None, block: str = None):
     index = get_index()
-    results = index.score(prompt, category_filter=category)
+    results = index.score(prompt, category_filter=category, block_filter=block)
     pinned = get_pinned()
 
     selected_results = [r for r in results if r[0] >= threshold][:top_k]
     selected_ids = [r[1] for r in selected_results]
 
     print(f"[*] Tarefa: '{prompt}'")
-    if category:
+    if block:
+        print(f"[*] Bloco Temático: '{block}'")
+    elif category:
         print(f"[*] Filtro de Categoria: '{category}'")
 
     reset()
@@ -214,20 +218,21 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
             print("Nenhuma skill atingiu o threshold de ativação.")
         for score, sid, matches in results[:5]:
             meta = index.manifest.get(sid, {})
-            cat = meta.get("category", "tools")
+            cat = meta.get("thematic_block", meta.get("category", "tools"))
             status_str = "[SELECIONADA]" if sid in selected_ids else "[DESCARTADA]"
-            print(f"  {status_str} Score: {score:5.2f} | ID: {sid:30} | Cat: {cat:12} | Matches: {', '.join(matches)}")
+            print(f"  {status_str} Score: {score:5.2f} | ID: {sid:30} | Bloco: {cat:15} | Matches: {', '.join(matches)}")
 
-def search(query: str, top_k: int = 10, category: str = None):
+def search(query: str, top_k: int = 10, category: str = None, block: str = None):
     index = get_index()
-    results = index.score(query, category_filter=category)
-    print(f"[*] Busca por: '{query}'" + (f" na categoria '{category}'" if category else ""))
+    results = index.score(query, category_filter=category, block_filter=block)
+    label = f"no bloco '{block}'" if block else (f"na categoria '{category}'" if category else "")
+    print(f"[*] Busca por: '{query}' {label}".strip())
     print(f"[*] Encontradas: {len(results)} skills compatíveis")
     for score, sid, matches in results[:top_k]:
         meta = index.manifest.get(sid, {})
-        cat = meta.get("category", "tools")
+        blk = meta.get("thematic_block", "tools")
         desc = meta.get("description", "")[:90] + "..."
-        print(f"  [{score:4.1f}] {sid:30} ({cat}) -> {desc}")
+        print(f"  [{score:4.1f}] {sid:30} ({blk}) -> {desc}")
 
 def status():
     manifest = get_manifest()
@@ -240,8 +245,8 @@ def status():
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Uso do Roteador de Skills BM25:")
-        print("  python scripts/auto_route.py '<tarefa a executar>' [--explain] [--top-k N] [--category CAT]")
-        print("  python scripts/auto_route.py search '<termo>' [--category CAT]")
+        print("  python scripts/auto_route.py '<tarefa a executar>' [--explain] [--top-k N] [--block BLOCO] [--category CAT]")
+        print("  python scripts/auto_route.py search '<termo>' [--block BLOCO] [--category CAT]")
         print("  python scripts/auto_route.py pin <id1> [id2...]")
         print("  python scripts/auto_route.py unpin <id1> [id2...]")
         print("  python scripts/auto_route.py status")
@@ -260,28 +265,38 @@ if __name__ == "__main__":
     elif cmd == "unpin":
         unpin(args[1:])
     elif cmd == "search":
-        q = args[1] if len(args) > 1 else ""
+        q = args[1] if len(args) > 1 and not args[1].startswith("--") else ""
         cat = None
+        block = None
         if "--category" in args:
             idx = args.index("--category")
             if idx + 1 < len(args):
                 cat = args[idx + 1]
-        search(q, category=cat)
+        if "--block" in args:
+            idx = args.index("--block")
+            if idx + 1 < len(args):
+                block = args[idx + 1]
+        search(q, category=cat, block=block)
     else:
         # Modo Roteamento
         explain = "--explain" in args
         category = None
+        block = None
         top_k = 2
 
         if "--category" in args:
             idx = args.index("--category")
             if idx + 1 < len(args):
                 category = args[idx + 1]
+        if "--block" in args:
+            idx = args.index("--block")
+            if idx + 1 < len(args):
+                block = args[idx + 1]
         if "--top-k" in args:
             idx = args.index("--top-k")
             if idx + 1 < len(args):
                 top_k = int(args[idx + 1])
 
-        clean_args = [a for a in args if not a.startswith("--") and a not in (category, str(top_k))]
+        clean_args = [a for a in args if not a.startswith("--") and a not in (category, block, str(top_k))]
         prompt = " ".join(clean_args)
-        route(prompt, top_k=top_k, explain=explain, category=category)
+        route(prompt, top_k=top_k, explain=explain, category=category, block=block)
