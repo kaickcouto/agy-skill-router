@@ -252,41 +252,64 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
     if mod_service:
         print(f"[MÓDULO CMS] Serviço Detectado: '{mod_service}' -> {', '.join(mod_skills)}")
         activated = add(mod_skills)
-        return {"module": mod_service, "activated": activated, "pinned": list(pinned)}
+        return {"status": "module_match", "confidence": 10.0, "threshold": threshold, "module": mod_service, "activated": activated, "pinned": list(pinned)}
 
     if bundle_id:
         b_title = SKILL_BUNDLES[bundle_id]["title"]
         print(f"[BUNDLE] Combo Ativado: '{b_title}' -> {', '.join(bundle_skills)}")
         activated = add(bundle_skills)
-        return {"bundle": bundle_id, "activated": activated, "pinned": list(pinned)}
+        return {"status": "bundle_match", "confidence": 10.0, "threshold": threshold, "bundle": bundle_id, "activated": activated, "pinned": list(pinned)}
 
-    # 2. Roteamento BM25 por Relevância
+    # 2. Roteamento BM25 por Relevância com Desempate de Colisão
     index = get_index()
     results = index.score(prompt, category_filter=category, block_filter=block)
+
+    # Desempate determinístico para skills semanticamente parecidas:
+    # Prioriza termos não-genéricos específicos e gatilhos explícitos
+    def disambiguation_key(item):
+        score, sid, matches = item
+        specific_matches = len([m for m in matches if m not in GENERIC_TERMS])
+        meta = index.manifest.get(sid, {})
+        trig_matches = sum(1 for t in meta.get("triggers", []) if any(normalize(m) in normalize(t) for m in matches))
+        return (score, specific_matches, trig_matches)
+
+    results.sort(key=disambiguation_key, reverse=True)
 
     selected_results = [r for r in results if r[0] >= threshold][:top_k]
     selected_ids = [r[1] for r in selected_results]
 
     if selected_ids:
-        print(f"[*] Roteando automaticamente para: {', '.join(selected_ids)}")
+        confidence = selected_results[0][0]
+        status = "routed"
+        print(f"[*] Roteando automaticamente para: {', '.join(selected_ids)} (Confiança: {confidence:.2f} >= {threshold})")
         activated = add(selected_ids)
     else:
+        confidence = results[0][0] if results else 0.0
+        status = "fallback_base_mode"
         if pinned:
-            print(f"[*] Nenhuma nova skill especializada requerida (mantidas {len(pinned)} fixadas).")
+            print(f"[*] Nenhuma skill atingiu o limiar de confiança ({confidence:.2f} < {threshold}). Fallback: modo base (mantidas {len(pinned)} fixadas).")
         else:
-            print("[*] Nenhuma skill especializada requerida (modo base sem custo extra).")
+            print(f"[*] Nenhuma skill atingiu o limiar de confiança ({confidence:.2f} < {threshold}). Fallback: modo base sem custo extra.")
 
     if explain:
         print("\n--- [EXPLAIN / BM25 RANKING] ---")
         if not selected_results:
-            print("Nenhuma skill atingiu o threshold de ativação.")
+            print(f"Nenhuma skill atingiu o limiar de ativação ({threshold}). Encaminhado para fallback.")
         for score, sid, matches in results[:5]:
             meta = index.manifest.get(sid, {})
             cat = meta.get("thematic_block", meta.get("category", "tools"))
             status_str = "[SELECIONADA]" if sid in selected_ids else "[DESCARTADA]"
             print(f"  {status_str} Score: {score:5.2f} | ID: {sid:30} | Bloco: {cat:15} | Matches: {', '.join(matches)}")
 
-    return {"bundle": None, "activated": activated, "pinned": list(pinned), "results": results[:5]}
+    return {
+        "status": status,
+        "confidence": round(confidence, 2),
+        "threshold": threshold,
+        "bundle": None,
+        "activated": activated,
+        "pinned": list(pinned),
+        "results": results[:5]
+    }
 
 def search(query: str, top_k: int = 10, category: str = None, block: str = None):
     index = get_index()

@@ -1,6 +1,7 @@
 import sys
 import os
 import io
+import re
 import json
 import traceback
 import contextlib
@@ -195,6 +196,16 @@ def capture_execution(func, *args, **kwargs):
         ret = func(*args, **kwargs)
     return buf.getvalue().strip(), ret
 
+SKILL_ID_REGEX = re.compile(r'^[a-zA-Z0-9_\-]+$')
+
+def validate_skill_id(sid: any) -> str:
+    if not sid or not isinstance(sid, str):
+        raise ValueError("skill_id é obrigatório e deve ser uma string.")
+    sid = sid.strip()
+    if not SKILL_ID_REGEX.match(sid):
+        raise ValueError(f"skill_id inválido '{sid}': use apenas letras, números, hífens e underscores.")
+    return sid
+
 def safe_int(val, default: int = 2, min_val: int = 1, max_val: int = 10) -> int:
     try:
         return max(min_val, min(max_val, int(val)))
@@ -296,9 +307,7 @@ def handle_search_skills(arguments: dict) -> dict:
     }
 
 def handle_pin_skill(arguments: dict) -> dict:
-    sid = arguments.get("skill_id", "").strip()
-    if not sid:
-        raise ValueError("skill_id é obrigatório")
+    sid = validate_skill_id(arguments.get("skill_id"))
     stdout_text, _ = capture_execution(manage_skills.pin, [sid])
     return {
         "content": [
@@ -310,9 +319,7 @@ def handle_pin_skill(arguments: dict) -> dict:
     }
 
 def handle_unpin_skill(arguments: dict) -> dict:
-    sid = arguments.get("skill_id", "").strip()
-    if not sid:
-        raise ValueError("skill_id é obrigatório")
+    sid = validate_skill_id(arguments.get("skill_id"))
     stdout_text, _ = capture_execution(manage_skills.unpin, [sid])
     return {
         "content": [
@@ -324,9 +331,7 @@ def handle_unpin_skill(arguments: dict) -> dict:
     }
 
 def handle_skill_info(arguments: dict) -> dict:
-    sid = arguments.get("skill_id", "").strip()
-    if not sid:
-        raise ValueError("skill_id é obrigatório")
+    sid = validate_skill_id(arguments.get("skill_id"))
     stdout_text, meta = capture_execution(auto_route.info, sid)
     return {
         "content": [
@@ -338,12 +343,16 @@ def handle_skill_info(arguments: dict) -> dict:
     }
 
 def handle_apply_preset(arguments: dict) -> dict:
-    pname = arguments.get("preset_name", "").strip()
+    pname = str(arguments.get("preset_name") or "").strip()
     if not pname:
-        raise ValueError("preset_name é obrigatório")
+        raise ValueError("preset_name é obrigatório.")
+    if not re.match(r'^[a-zA-Z0-9_\-]+$', pname):
+        raise ValueError(f"preset_name inválido '{pname}': use apenas letras, números e hífens.")
     ws = arguments.get("workspace_dir")
-    if ws:
-        manage_skills.set_workspace(ws)
+    if ws and isinstance(ws, str):
+        ws_path = Path(ws).resolve()
+        if ws_path.exists() and ws_path.is_dir():
+            manage_skills.set_workspace(ws_path)
     stdout_text, ok = capture_execution(auto_route.apply_preset, pname)
     return {
         "content": [
@@ -519,6 +528,15 @@ def main():
                         "jsonrpc": "2.0",
                         "id": req_id,
                         "result": tool_result
+                    })
+                except ValueError as ve:
+                    send_json({
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "result": {
+                            "content": [{"type": "text", "text": f"[ERRO DE VALIDAÇÃO] {str(ve)}"}],
+                            "isError": True
+                        }
                     })
                 except Exception as ex:
                     send_json({

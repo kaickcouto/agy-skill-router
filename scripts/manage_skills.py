@@ -267,12 +267,20 @@ def reset(force: bool = False):
     preserved_native = []
     if active_dir.exists():
         for item in active_dir.iterdir():
-            if item.name != ".gitkeep" and item.name not in pinned_targets:
-                if item.is_dir() and not is_junction_or_link(item):
-                    preserved_native.append(item.name)
-                    continue
-                remove_item(item)
-                removed_count += 1
+            if item.name == ".gitkeep" or item.name in pinned_targets:
+                continue
+            if item.is_dir() and not is_junction_or_link(item):
+                preserved_native.append(item.name)
+                continue
+            if item.is_file():
+                try:
+                    item.unlink(missing_ok=True)
+                    removed_count += 1
+                except Exception:
+                    pass
+                continue
+            remove_item(item)
+            removed_count += 1
 
     msg_parts = [f"[OK] Reset concluído ({removed_count} links removidos)"]
     if pinned:
