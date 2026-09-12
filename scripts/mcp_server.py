@@ -195,13 +195,21 @@ def capture_execution(func, *args, **kwargs):
         ret = func(*args, **kwargs)
     return buf.getvalue().strip(), ret
 
+def safe_int(val, default: int = 2, min_val: int = 1, max_val: int = 10) -> int:
+    try:
+        return max(min_val, min(max_val, int(val)))
+    except (ValueError, TypeError):
+        return default
+
 def handle_route_skills(arguments: dict) -> dict:
-    task = arguments.get("task", "")
-    top_k = int(arguments.get("top_k", 2))
-    block = arguments.get("block")
+    task = str(arguments.get("task") or "").strip()
+    top_k = safe_int(arguments.get("top_k"), default=2, min_val=1, max_val=5)
+    block = str(arguments.get("block")).strip() if arguments.get("block") else None
     ws = arguments.get("workspace_dir")
-    if ws:
-        manage_skills.set_workspace(ws)
+    if ws and isinstance(ws, str):
+        ws_path = Path(ws).resolve()
+        if ws_path.exists() and ws_path.is_dir():
+            manage_skills.set_workspace(ws_path)
 
     stdout_text, res = capture_execution(
         auto_route.route,
@@ -264,9 +272,9 @@ def handle_reset_skills(arguments: dict) -> dict:
     }
 
 def handle_search_skills(arguments: dict) -> dict:
-    query = arguments.get("query", "")
-    top_k = int(arguments.get("top_k", 5))
-    block = arguments.get("block")
+    query = str(arguments.get("query") or "").strip()
+    top_k = safe_int(arguments.get("top_k"), default=5, min_val=1, max_val=20)
+    block = str(arguments.get("block")).strip() if arguments.get("block") else None
 
     stdout_text, matches = capture_execution(
         auto_route.search,
