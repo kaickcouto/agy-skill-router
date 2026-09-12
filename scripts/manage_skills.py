@@ -15,6 +15,7 @@ if sys.platform == "win32":
 ROOT = Path(__file__).resolve().parent.parent
 VAULT_DIR = ROOT / "skills_vault"
 ACTIVE_DIR = ROOT / ".agent" / "skills"
+PINNED_FILE = ROOT / ".agent" / ".pinned.json"
 MANIFEST_PATH = ROOT / "skills_manifest.json"
 ENV_PATH = ROOT / ".env"
 
@@ -33,6 +34,43 @@ def get_manifest() -> dict:
         sys.exit(1)
     with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
         return {item["id"]: item for item in json.load(f)}
+
+def get_pinned() -> set[str]:
+    if PINNED_FILE.exists():
+        try:
+            with open(PINNED_FILE, "r", encoding="utf-8") as f:
+                return set(json.load(f))
+        except Exception:
+            return set()
+    return set()
+
+def save_pinned(pinned: set[str]):
+    PINNED_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(PINNED_FILE, "w", encoding="utf-8") as f:
+        json.dump(sorted(list(pinned)), f, indent=2)
+
+def pin(ids: list[str]):
+    manifest = get_manifest()
+    pinned = get_pinned()
+    valid_ids = [sid for sid in ids if sid in manifest]
+    for sid in valid_ids:
+        pinned.add(sid)
+    save_pinned(pinned)
+    add(valid_ids)
+    print(f"[PIN] Skills fixadas: {', '.join(valid_ids)}")
+
+def unpin(ids: list[str]):
+    pinned = get_pinned()
+    manifest = get_manifest()
+    for sid in ids:
+        if sid in pinned:
+            pinned.remove(sid)
+            target_name = manifest.get(sid, {}).get("target", sid)
+            remove_item(ACTIVE_DIR / target_name)
+            print(f"[UNPIN] Desafixada e removida: {sid}")
+        else:
+            print(f"[!] Skill não estava fixada: {sid}")
+    save_pinned(pinned)
 
 def remove_item(path: Path):
     if path.name == ".gitkeep":
@@ -85,7 +123,11 @@ def add(ids: list[str]) -> list[str]:
 
 def remove(ids: list[str]):
     manifest = get_manifest()
+    pinned = get_pinned()
     for sid in ids:
+        if sid in pinned:
+            print(f"[!] Skill '{sid}' está fixada (PIN). Use 'unpin {sid}' para removê-la.")
+            continue
         target_name = manifest.get(sid, {}).get("target", sid)
         dst = ACTIVE_DIR / target_name
         if dst.exists() or dst.is_symlink():
@@ -94,15 +136,26 @@ def remove(ids: list[str]):
         else:
             print(f"[!] Skill inativa: {sid}")
 
-def reset():
+def reset(force: bool = False):
+    pinned = set() if force else get_pinned()
+    manifest = get_manifest()
+    pinned_targets = {manifest.get(sid, {}).get("target", sid) for sid in pinned}
+
+    removed_count = 0
     if ACTIVE_DIR.exists():
         for item in ACTIVE_DIR.iterdir():
-            if item.name != ".gitkeep":
+            if item.name != ".gitkeep" and item.name not in pinned_targets:
                 remove_item(item)
-    print("[OK] Todas as skills ativas foram removidas.")
+                removed_count += 1
+
+    if pinned:
+        print(f"[OK] Reset concluído ({removed_count} removidas). Mantidas fixadas: {', '.join(pinned)}")
+    else:
+        print("[OK] Todas as skills ativas foram removidas.")
 
 def list_skills() -> list[str]:
     active = []
+    pinned = get_pinned()
     if ACTIVE_DIR.exists():
         active = [item.name for item in ACTIVE_DIR.iterdir() if item.name != ".gitkeep"]
 
@@ -111,12 +164,13 @@ def list_skills() -> list[str]:
         return []
     print("[*] Skills ativas em .agent/skills/:")
     for name in active:
-        print(f"  * {name}")
+        tag = " [PINNED]" if name in pinned else ""
+        print(f"  * {name}{tag}")
     return active
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Uso: python scripts/manage_skills.py [add|remove|reset|list] [args...]")
+        print("Uso: python scripts/manage_skills.py [add|remove|reset|list|pin|unpin] [args...]")
         sys.exit(0)
 
     cmd = sys.argv[1].lower()
@@ -130,5 +184,9 @@ if __name__ == "__main__":
         reset()
     elif cmd == "list":
         list_skills()
+    elif cmd == "pin":
+        pin(args)
+    elif cmd == "unpin":
+        unpin(args)
     else:
-        print(f"[!] Comando inválido: {cmd}. Use: add, remove, reset ou list.")
+        print(f"[!] Comando inválido: {cmd}. Use: add, remove, reset, list, pin ou unpin.")

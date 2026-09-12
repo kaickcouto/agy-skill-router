@@ -113,6 +113,28 @@ def extract_metadata(target: Path) -> tuple[str, list[str]]:
 
     return desc, tags
 
+CATEGORIES = {
+    "frontend": ["react", "vue", "svelte", "tailwind", "css", "html", "ui", "ux", "frontend", "nextjs", "vite", "component", "web", "dom", "zustand", "redux"],
+    "backend": ["fastapi", "express", "node", "api", "rest", "graphql", "server", "endpoint", "auth", "jwt", "backend", "oauth", "pydantic"],
+    "database": ["sql", "postgres", "postgresql", "supabase", "database", "banco", "redis", "mongo", "prisma", "drizzle", "migration", "orm", "queries"],
+    "devops": ["docker", "kubernetes", "k8s", "terraform", "aws", "cloud", "vercel", "deploy", "git", "ci/cd", "pipeline", "bash", "linux", "nginx"],
+    "testing": ["test", "testing", "vitest", "jest", "playwright", "cypress", "e2e", "unit", "mock", "tdd", "qa", "debug"],
+    "data-ai": ["pandas", "excel", "xlsx", "csv", "data", "ai", "llm", "rag", "embeddings", "openai", "claude", "mcp", "analytics", "scraping", "scraper"],
+    "design-media": ["design", "svg", "canvas", "threejs", "art", "gif", "video", "figma", "theme", "color", "animation"],
+    "productivity": ["docx", "pptx", "pdf", "document", "report", "presentation", "markdown", "writing", "slack", "trello", "jira", "notion"]
+}
+
+def detect_category(name: str, desc: str, tags: list[str]) -> str:
+    text = f"{name} {desc} {' '.join(tags)}".lower()
+    scores = {}
+    for cat, kws in CATEGORIES.items():
+        s = sum(3 if kw in name.lower() else 1 for kw in kws if kw in text)
+        if s > 0:
+            scores[cat] = s
+    if scores:
+        return max(scores, key=scores.get)
+    return "tools"
+
 def run():
     QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
     manifest = []
@@ -155,9 +177,11 @@ def run():
             continue
 
         desc, tags = extract_metadata(item)
+        cat = detect_category(item.name, desc, tags)
         manifest.append({
             "id": item.name.replace(".py", ""),
             "target": item.name,
+            "category": cat,
             "description": desc,
             "tags": tags,
             "required_env": sorted(list(set(required_envs)))
