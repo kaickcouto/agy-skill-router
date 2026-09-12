@@ -26,8 +26,8 @@ Mantém centenas de skills técnicas descansando no **Vault** (custo zero de con
 git clone https://github.com/kaickcouto/agy-skill-router.git
 cd agy-skill-router
 
-# Gera o manifesto e audita a integridade do vault
-python scripts/setup_skills.py
+# Configuração 1-Clique Nativa para o Google Antigravity (AGY)
+python scripts/setup_agy.py
 ```
 
 ---
