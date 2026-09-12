@@ -143,6 +143,23 @@ TOOLS_DEFINITIONS = [
         "annotations": {
             "idempotentHint": True
         }
+    },
+    {
+        "name": "skill_info",
+        "description": "Retorna o card de classificação detalhado de uma skill: intenção de chamada, triggers de demanda e stack técnica.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "skill_id": {
+                    "type": "string",
+                    "description": "ID da skill a inspecionar (ex: 'supabase-postgres-best-practices')."
+                }
+            },
+            "required": ["skill_id"]
+        },
+        "annotations": {
+            "readOnlyHint": True
+        }
     }
 ]
 
@@ -262,6 +279,20 @@ def handle_unpin_skill(arguments: dict) -> dict:
         ]
     }
 
+def handle_skill_info(arguments: dict) -> dict:
+    sid = arguments.get("skill_id", "").strip()
+    if not sid:
+        raise ValueError("skill_id é obrigatório")
+    stdout_text, meta = capture_execution(auto_route.info, sid)
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": json.dumps(meta, ensure_ascii=False, indent=2) if meta else stdout_text
+            }
+        ]
+    }
+
 TOOL_HANDLERS = {
     "route_skills": handle_route_skills,
     "list_skills": handle_list_skills,
@@ -269,6 +300,7 @@ TOOL_HANDLERS = {
     "search_skills": handle_search_skills,
     "pin_skill": handle_pin_skill,
     "unpin_skill": handle_unpin_skill,
+    "skill_info": handle_skill_info,
 }
 
 def send_json(data: dict):

@@ -70,6 +70,9 @@ class BM25Index:
         for sid, meta in manifest.items():
             norm_id = normalize(sid)
             id_tokens = tokenize(norm_id)
+            intent_tokens = tokenize(meta.get("call_intent", ""))
+            trigger_tokens = [t for trig in meta.get("triggers", []) for t in tokenize(trig)]
+            tech_tokens = [normalize(tech) for tech in meta.get("tech_stack", [])]
             desc_tokens = tokenize(meta.get("description", ""))
             tag_tokens = [normalize(t) for t in meta.get("tags", [])]
             cat_tokens = tokenize(meta.get("category", ""))
@@ -79,6 +82,12 @@ class BM25Index:
             tf = Counter()
             for t in id_tokens:
                 tf[t] += 4.0
+            for t in intent_tokens:
+                tf[t] += 4.0
+            for t in trigger_tokens:
+                tf[t] += 3.5
+            for t in tech_tokens:
+                tf[t] += 3.0
             for t in block_tokens:
                 tf[t] += 3.0
             for t in syn_tokens:
@@ -264,6 +273,36 @@ def search(query: str, top_k: int = 10, category: str = None, block: str = None)
         output.append({"score": round(score, 2), "id": sid, "block": blk, "description": meta.get("description", ""), "matches": matches})
     return output
 
+def info(skill_id: str) -> dict:
+    manifest = get_manifest()
+    meta = manifest.get(skill_id)
+    if not meta:
+        print(f"[!] Skill '{skill_id}' não encontrada no vault.")
+        return None
+
+    blk = meta.get("thematic_block", "geral")
+    intent = meta.get("call_intent", "Sem intenção cadastrada.")
+    triggers = meta.get("triggers", [])
+    stack = meta.get("tech_stack", [])
+
+    print("\n" + "=" * 65)
+    print(f"  SKILL: {skill_id}")
+    print(f"  BLOCO: {blk}")
+    print("=" * 65)
+    print(f"\n🎯 INTENÇÃO DE CHAMADA:")
+    print(f"   {intent}")
+    print(f"\n⚡ QUANDO CHAMAR (TRIGGERS DE DEMANDA):")
+    if triggers:
+        for t in triggers:
+            print(f"   • {t}")
+    else:
+        print("   • Uso geral conforme documentação técnica.")
+    if stack:
+        print(f"\n🛠️ TECH STACK:")
+        print(f"   {', '.join(stack)}")
+    print("=" * 65 + "\n")
+    return meta
+
 def status():
     manifest = get_manifest()
     pinned = get_pinned()
@@ -277,6 +316,7 @@ if __name__ == "__main__":
         print("Uso do Roteador de Skills BM25:")
         print("  python scripts/auto_route.py '<tarefa a executar>' [--explain] [--top-k N] [--block BLOCO] [--category CAT]")
         print("  python scripts/auto_route.py search '<termo>' [--block BLOCO] [--category CAT]")
+        print("  python scripts/auto_route.py info <skill_id>")
         print("  python scripts/auto_route.py pin <id1> [id2...]")
         print("  python scripts/auto_route.py unpin <id1> [id2...]")
         print("  python scripts/auto_route.py status")
@@ -290,6 +330,12 @@ if __name__ == "__main__":
         status()
     elif cmd == "reset":
         reset()
+    elif cmd == "info":
+        sid = args[1] if len(args) > 1 else ""
+        if sid:
+            info(sid)
+        else:
+            print("Uso: python scripts/auto_route.py info <skill_id>")
     elif cmd == "pin":
         pin(args[1:])
     elif cmd == "unpin":
