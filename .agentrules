@@ -1,0 +1,13 @@
+### Roteamento Dinâmico de Ferramentas (Modo Econômico)
+Você opera sob uma arquitetura de contexto sob demanda para economizar tokens.
+- O catálogo de ferramentas aprovadas está indexado em `skills_manifest.json`.
+- A pasta de execução ativa é exclusivamente `.agent/skills/`.
+
+Protocolo de Execução:
+1. Tarefas comuns de raciocínio, escrita ou manipulação simples de arquivos NÃO devem ativar skills extras.
+2. Quando uma solicitação exigir habilidades ou ferramentas especializadas (PDF, planilhas Excel, Word, slides, testes, MCP, arte, etc.):
+   a. Execute no terminal: `python scripts/auto_route.py "<descrição da tarefa>"`
+   b. O seletor desativará automaticamente as anteriores e ativará apenas as ferramentas necessárias em `.agent/skills/`.
+   c. Prossiga com a tarefa utilizando as ferramentas ativadas.
+3. Ao finalizar uma tarefa encadeada ou mudar de assunto, execute:
+   `python scripts/auto_route.py reset`

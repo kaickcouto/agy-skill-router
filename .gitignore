@@ -1,0 +1,8 @@
+.env
+.env.*
+__pycache__/
+*.py[cod]
+skills_quarantine/
+_temp_sources/
+.agent/skills/*
+!.agent/skills/.gitkeep
