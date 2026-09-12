@@ -14,10 +14,39 @@ if sys.platform == "win32":
 
 ROOT = Path(__file__).resolve().parent.parent
 VAULT_DIR = ROOT / "skills_vault"
-ACTIVE_DIR = ROOT / ".agent" / "skills"
-PINNED_FILE = ROOT / ".agent" / ".pinned.json"
 MANIFEST_PATH = ROOT / "skills_manifest.json"
 ENV_PATH = ROOT / ".env"
+
+CURRENT_WORKSPACE = None
+
+def set_workspace(path: str | Path = None):
+    global CURRENT_WORKSPACE
+    if path:
+        CURRENT_WORKSPACE = Path(path).resolve()
+    else:
+        CURRENT_WORKSPACE = None
+
+def get_active_dir() -> Path:
+    if CURRENT_WORKSPACE:
+        d = CURRENT_WORKSPACE / ".agent" / "skills"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+    cwd = Path.cwd()
+    if (cwd / ".git").exists() and cwd.resolve() != ROOT.resolve():
+        d = cwd / ".agent" / "skills"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+    d = ROOT / ".agent" / "skills"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+def get_pinned_file() -> Path:
+    if CURRENT_WORKSPACE:
+        return CURRENT_WORKSPACE / ".agent" / ".pinned.json"
+    cwd = Path.cwd()
+    if (cwd / ".git").exists() and cwd.resolve() != ROOT.resolve():
+        return cwd / ".agent" / ".pinned.json"
+    return ROOT / ".agent" / ".pinned.json"
 
 def load_env():
     if ENV_PATH.exists():
@@ -36,17 +65,19 @@ def get_manifest() -> dict:
         return {item["id"]: item for item in json.load(f)}
 
 def get_pinned() -> set[str]:
-    if PINNED_FILE.exists():
+    pinned_path = get_pinned_file()
+    if pinned_path.exists():
         try:
-            with open(PINNED_FILE, "r", encoding="utf-8") as f:
+            with open(pinned_path, "r", encoding="utf-8") as f:
                 return set(json.load(f))
         except Exception:
             return set()
     return set()
 
 def save_pinned(pinned: set[str]):
-    PINNED_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(PINNED_FILE, "w", encoding="utf-8") as f:
+    pinned_path = get_pinned_file()
+    pinned_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(pinned_path, "w", encoding="utf-8") as f:
         json.dump(sorted(list(pinned)), f, indent=2)
 
 def pin(ids: list[str]):
@@ -66,7 +97,7 @@ def unpin(ids: list[str]):
         if sid in pinned:
             pinned.remove(sid)
             target_name = manifest.get(sid, {}).get("target", sid)
-            remove_item(ACTIVE_DIR / target_name)
+            remove_item(get_active_dir() / target_name)
             print(f"[UNPIN] Desafixada e removida: {sid}")
         else:
             print(f"[!] Skill não estava fixada: {sid}")
@@ -76,9 +107,9 @@ def remove_item(path: Path):
     if path.name == ".gitkeep":
         return
 
-    # Trava de segurança: impede exclusão fora de .agent/skills/
+    # Trava de segurança: impede exclusão fora do diretório ativo
     try:
-        path.absolute().relative_to(ACTIVE_DIR.absolute())
+        path.absolute().relative_to(get_active_dir().absolute())
     except ValueError:
         print(f"[ALERTA DE SEGURANÇA] Bloqueada tentativa de remover fora do diretório ativo: {path}")
         return
@@ -127,7 +158,8 @@ def link_directory(src: Path, dst: Path):
 def add(ids: list[str]) -> list[str]:
     load_env()
     manifest = get_manifest()
-    ACTIVE_DIR.mkdir(parents=True, exist_ok=True)
+    active_dir = get_active_dir()
+    active_dir.mkdir(parents=True, exist_ok=True)
     activated = []
 
     for sid in ids:
@@ -138,7 +170,7 @@ def add(ids: list[str]) -> list[str]:
         meta = manifest[sid]
         target_name = meta.get("target", sid)
         src = (VAULT_DIR / target_name).resolve()
-        dst = ACTIVE_DIR / target_name
+        dst = active_dir / target_name
 
         if dst.exists() or dst.is_symlink():
             print(f"[-] Já ativa: {sid}")
@@ -162,12 +194,13 @@ def add(ids: list[str]) -> list[str]:
 def remove(ids: list[str]):
     manifest = get_manifest()
     pinned = get_pinned()
+    active_dir = get_active_dir()
     for sid in ids:
         if sid in pinned:
             print(f"[!] Skill '{sid}' está fixada (PIN). Use 'unpin {sid}' para removê-la.")
             continue
         target_name = manifest.get(sid, {}).get("target", sid)
-        dst = ACTIVE_DIR / target_name
+        dst = active_dir / target_name
         if dst.exists() or dst.is_symlink():
             remove_item(dst)
             print(f"[-] Desativada: {sid}")
@@ -179,9 +212,10 @@ def reset(force: bool = False):
     manifest = get_manifest()
     pinned_targets = {manifest.get(sid, {}).get("target", sid) for sid in pinned}
 
+    active_dir = get_active_dir()
     removed_count = 0
-    if ACTIVE_DIR.exists():
-        for item in ACTIVE_DIR.iterdir():
+    if active_dir.exists():
+        for item in active_dir.iterdir():
             if item.name != ".gitkeep" and item.name not in pinned_targets:
                 remove_item(item)
                 removed_count += 1
@@ -194,13 +228,14 @@ def reset(force: bool = False):
 def list_skills() -> list[str]:
     active = []
     pinned = get_pinned()
-    if ACTIVE_DIR.exists():
-        active = [item.name for item in ACTIVE_DIR.iterdir() if item.name != ".gitkeep"]
+    active_dir = get_active_dir()
+    if active_dir.exists():
+        active = [item.name for item in active_dir.iterdir() if item.name != ".gitkeep"]
 
     if not active:
         print("[*] Nenhuma skill ativa no momento.")
         return []
-    print("[*] Skills ativas em .agent/skills/:")
+    print(f"[*] Skills ativas em {active_dir.relative_to(ROOT) if active_dir.is_relative_to(ROOT) else active_dir}:")
     for name in active:
         tag = " [PINNED]" if name in pinned else ""
         print(f"  * {name}{tag}")

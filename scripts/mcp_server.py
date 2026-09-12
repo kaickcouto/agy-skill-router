@@ -47,6 +47,10 @@ TOOLS_DEFINITIONS = [
                 "block": {
                     "type": "string",
                     "description": "Filtro opcional por bloco temático: core-frontend, cloud-devops, core-backend, data-ai-engine, quality-testing, core-database, office-docs."
+                },
+                "workspace_dir": {
+                    "type": "string",
+                    "description": "Caminho absoluto opcional do projeto externo alvo onde as skills serão injetadas."
                 }
             },
             "required": ["task"]
@@ -174,6 +178,9 @@ def handle_route_skills(arguments: dict) -> dict:
     task = arguments.get("task", "")
     top_k = int(arguments.get("top_k", 2))
     block = arguments.get("block")
+    ws = arguments.get("workspace_dir")
+    if ws:
+        manage_skills.set_workspace(ws)
 
     stdout_text, res = capture_execution(
         auto_route.route,
@@ -185,6 +192,7 @@ def handle_route_skills(arguments: dict) -> dict:
 
     summary = {
         "task": task,
+        "workspace": str(manage_skills.get_active_dir().parent),
         "bundle_matched": res.get("bundle") if res else None,
         "activated_skills": res.get("activated", []) if res else [],
         "pinned_skills": res.get("pinned", []) if res else [],
@@ -199,7 +207,10 @@ def handle_route_skills(arguments: dict) -> dict:
         ]
     }
 
-def handle_list_skills(_arguments: dict) -> dict:
+def handle_list_skills(arguments: dict) -> dict:
+    ws = arguments.get("workspace_dir")
+    if ws:
+        manage_skills.set_workspace(ws)
     stdout_text, active = capture_execution(manage_skills.list_skills)
     pinned = list(manage_skills.get_pinned())
     return {
@@ -207,6 +218,7 @@ def handle_list_skills(_arguments: dict) -> dict:
             {
                 "type": "text",
                 "text": json.dumps({
+                    "workspace": str(manage_skills.get_active_dir().parent),
                     "active_skills": active,
                     "pinned_skills": pinned,
                     "details": stdout_text
@@ -216,6 +228,9 @@ def handle_list_skills(_arguments: dict) -> dict:
     }
 
 def handle_reset_skills(arguments: dict) -> dict:
+    ws = arguments.get("workspace_dir")
+    if ws:
+        manage_skills.set_workspace(ws)
     force = bool(arguments.get("force", False))
     stdout_text, _ = capture_execution(manage_skills.reset, force=force)
     return {
@@ -334,6 +349,17 @@ def main():
 
             # 1. Initialize
             if method == "initialize":
+                # Detecta workspace do cliente Antigravity / IDE
+                root_uri = params.get("rootUri") or ""
+                ws_folders = params.get("workspaceFolders") or []
+                if ws_folders and isinstance(ws_folders, list) and ws_folders[0].get("uri"):
+                    root_uri = ws_folders[0]["uri"]
+
+                if root_uri.startswith("file:///"):
+                    manage_skills.set_workspace(root_uri.replace("file:///", ""))
+                elif root_uri.startswith("file://"):
+                    manage_skills.set_workspace(root_uri.replace("file://", ""))
+
                 send_json({
                     "jsonrpc": "2.0",
                     "id": req_id,
@@ -368,8 +394,9 @@ def main():
             # 5. List resources
             elif method == "resources/list":
                 active_skills = []
-                if manage_skills.ACTIVE_DIR.exists():
-                    active_skills = [s.name for s in manage_skills.ACTIVE_DIR.iterdir() if s.name != ".gitkeep"]
+                cur_active = manage_skills.get_active_dir()
+                if cur_active.exists():
+                    active_skills = [s.name for s in cur_active.iterdir() if s.name != ".gitkeep"]
                 resources = [
                     {
                         "uri": f"skills://active/{s}",
@@ -391,13 +418,14 @@ def main():
                 uri = params.get("uri", "")
                 content = ""
                 mime = "text/markdown"
+                cur_active = manage_skills.get_active_dir()
                 if uri.startswith("skills://active/"):
                     sid = uri.replace("skills://active/", "").strip("/")
-                    md_path = manage_skills.ACTIVE_DIR / sid / "SKILL.md"
+                    md_path = cur_active / sid / "SKILL.md"
                     if md_path.exists():
                         content = md_path.read_text(encoding="utf-8", errors="ignore")
                     else:
-                        content = f"[!] Arquivo SKILL.md não encontrado para a skill ativa '{sid}'."
+                        content = f"[!] Arquivo SKILL.md não encontrado para a skill ativa '{sid}' em {cur_active}."
                 elif uri.startswith("skills://vault/"):
                     sid = uri.replace("skills://vault/", "").strip("/")
                     md_path = manage_skills.VAULT_DIR / sid / "SKILL.md"
