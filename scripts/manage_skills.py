@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import shutil
+import stat
 from pathlib import Path
 
 # Suporte a UTF-8 no Windows
@@ -120,6 +121,15 @@ def unpin(ids: list[str]):
             print(f"[!] Skill não estava fixada: {sid}")
     save_pinned(pinned)
 
+def is_junction_or_link(path: Path) -> bool:
+    try:
+        if path.is_symlink():
+            return True
+        st = os.lstat(str(path))
+        return bool(st.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    except Exception:
+        return False
+
 def remove_item(path: Path):
     if path.name == ".gitkeep":
         return
@@ -131,6 +141,11 @@ def remove_item(path: Path):
         print(f"[ALERTA DE SEGURANÇA] Bloqueada tentativa de remover fora do diretório ativo: {path}")
         return
 
+    # Preserva pastas físicas nativas pré-existentes do projeto (nunca deleta arquivos do usuário)
+    if path.is_dir() and not is_junction_or_link(path):
+        print(f"[PRESERVADA] Skill física nativa mantida intocada: {path.name}")
+        return
+
     path_str = str(path.absolute())
     try:
         # No Windows, remove junção ou symlink instantaneamente
@@ -140,8 +155,8 @@ def remove_item(path: Path):
         pass
 
     try:
-        if path.is_dir():
-            shutil.rmtree(path_str, ignore_errors=True)
+        if is_junction_or_link(path):
+            os.rmdir(path_str)
         elif path.is_file():
             path.unlink(missing_ok=True)
     except Exception:
@@ -210,8 +225,8 @@ def add(ids: list[str]) -> list[str]:
         target_name = sid
         dst = active_dir / target_name
 
-        if dst.exists() or dst.is_symlink():
-            print(f"[-] Já ativa: {sid}")
+        if dst.exists() or dst.is_symlink() or is_junction_or_link(dst):
+            print(f"[-] Já ativa ou nativa: {sid}")
             activated.append(sid)
             continue
 
@@ -236,7 +251,7 @@ def remove(ids: list[str]):
             continue
         target_name = manifest.get(sid, {}).get("target", sid)
         dst = active_dir / target_name
-        if dst.exists() or dst.is_symlink():
+        if dst.exists() or dst.is_symlink() or is_junction_or_link(dst):
             remove_item(dst)
             print(f"[-] Desativada: {sid}")
         else:
@@ -249,16 +264,22 @@ def reset(force: bool = False):
 
     active_dir = get_active_dir()
     removed_count = 0
+    preserved_native = []
     if active_dir.exists():
         for item in active_dir.iterdir():
             if item.name != ".gitkeep" and item.name not in pinned_targets:
+                if item.is_dir() and not is_junction_or_link(item):
+                    preserved_native.append(item.name)
+                    continue
                 remove_item(item)
                 removed_count += 1
 
+    msg_parts = [f"[OK] Reset concluído ({removed_count} links removidos)"]
     if pinned:
-        print(f"[OK] Reset concluído ({removed_count} removidas). Mantidas fixadas: {', '.join(pinned)}")
-    else:
-        print("[OK] Todas as skills ativas foram removidas.")
+        msg_parts.append(f"Fixadas: {', '.join(pinned)}")
+    if preserved_native:
+        msg_parts.append(f"Nativas preservadas: {', '.join(preserved_native)}")
+    print(". ".join(msg_parts) + ".")
 
 def list_skills() -> list[str]:
     active = []
@@ -272,8 +293,14 @@ def list_skills() -> list[str]:
         return []
     print(f"[*] Skills ativas em {active_dir.relative_to(ROOT) if active_dir.is_relative_to(ROOT) else active_dir}:")
     for name in active:
-        tag = " [PINNED]" if name in pinned else ""
-        print(f"  * {name}{tag}")
+        p = active_dir / name
+        tags = []
+        if name in pinned:
+            tags.append("PINNED")
+        if p.is_dir() and not is_junction_or_link(p):
+            tags.append("NATIVA/LOCAL")
+        tag_str = f" [{' | '.join(tags)}]" if tags else ""
+        print(f"  * {name}{tag_str}")
     return active
 
 if __name__ == "__main__":
