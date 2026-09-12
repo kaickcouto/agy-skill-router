@@ -1,0 +1,65 @@
+{
+  "unrelated_frameworks": [
+    "angular", "vue", "svelte", "django", "laravel", "flutter",
+    "swift", "godot", "odoo", "wordpress", "drupal", "magento",
+    "spring", "ruby", "rails", "php", "csharp", "dotnet", "rust"
+  ],
+  "generic_terms": [
+    "python", "javascript", "typescript", "node", "code", "codigo",
+    "script", "funcao", "function", "arquivo", "file", "criar",
+    "fazer", "gerar", "escreva", "build", "create", "make", "task",
+    "ajustar", "modificar", "corrigir", "adicionar", "novo", "loop",
+    "loops", "logica", "explicar", "duvida", "ajuda", "array", "lista",
+    "while", "when", "with", "then", "also", "into", "from", "over",
+    "just", "more", "como", "funciona", "qual", "para"
+  ],
+  "synonyms": {
+    "supabase-postgres-best-practices": ["supabase", "postgres", "postgresql", "rls", "migration", "migrations", "tabela", "tabelas", "sql", "politicas"],
+    "supabase": ["supabase", "postgres", "postgresql", "rls", "migration", "migrations", "tabela", "tabelas", "sql"],
+    "supabase-automation": ["supabase", "migration", "banco", "database"],
+    "tailwind-design-system": ["tailwind", "tailwindcss", "css", "layout", "responsivo", "estilo", "tema"],
+    "tailwind-patterns": ["tailwind", "tailwindcss", "css", "layout", "estilo", "componentes"],
+    "tanstack-query-expert": ["tanstack", "react-query", "query", "cache", "fetch", "mutacao"],
+    "zod-validation-expert": ["zod", "validacao", "schema", "schemas", "dto"],
+    "vitest-skill": ["vitest", "teste", "testes", "testar", "unitario", "unitarios", "mock", "mocking"],
+    "webapp-testing": ["teste", "testes", "testar", "cypress", "playwright", "e2e", "qa", "automatizar", "verificar"],
+    "pdf": ["pdf", "pdfs", "adobe", "ocr", "formulario", "formularios", "folha", "pagina", "devis", "relatorio"],
+    "xlsx": ["planilha", "planilhas", "excel", "tabela", "tabelas", "spreadsheet", "spreadsheets", "csv", "tsv", "colunas", "linhas", "formulas", "ppa", "bpu", "openpyxl", "pandas"],
+    "docx": ["word", "doc", "docx", "documento", "documentos", "texto", "redacao", "relatorio", "contrato", "oficio"],
+    "pptx": ["powerpoint", "apresentacao", "apresentacoes", "slides", "slide", "deck", "pitch"],
+    "frontend-design": ["frontend", "interface", "ui", "ux", "react", "componente", "componentes", "layout", "visual", "tela"],
+    "web-artifacts-builder": ["site", "aplicacao", "pagina", "webapp", "dashboard", "componente", "spa"],
+    "mcp-builder": ["mcp", "protocolo", "servidor", "conector", "integration", "tools"],
+    "canvas-design": ["poster", "banner", "cartaz", "arte", "ilustracao", "design", "grafico"],
+    "slack-gif-creator": ["gif", "animacao", "slack", "sticker", "frame"],
+    "brand-guidelines": ["marca", "identidade", "branding", "paleta", "cores", "padrao"],
+    "doc-coauthoring": ["coautoria", "revisao", "editorial", "redigir", "co-autor"],
+    "internal-comms": ["comunicacao", "comunicado", "anuncio", "newsletter", "memorando"]
+  },
+  "skill_bundles": {
+    "fullstack-supabase": {
+      "title": "Fullstack Supabase & React",
+      "triggers": ["crud", "supabase", "fullstack", "autenticacao", "dashboard", "bpu", "banco"],
+      "min_matches": 2,
+      "skills": ["supabase-postgres-best-practices", "frontend-design", "zod-validation-expert"]
+    },
+    "frontend-tailwind-ui": {
+      "title": "Frontend Tailwind & Design System",
+      "triggers": ["tailwind", "interface", "componentes", "layout", "responsivo", "estilo"],
+      "min_matches": 2,
+      "skills": ["tailwind-patterns", "frontend-design"]
+    },
+    "excel-data-reports": {
+      "title": "Ingestão Excel/PPA & Relatórios PDF",
+      "triggers": ["planilha", "excel", "devis", "ppa", "relatorio", "tabela", "openpyxl"],
+      "min_matches": 2,
+      "skills": ["xlsx", "pdf"]
+    },
+    "web-testing-suite": {
+      "title": "Suíte Completa de Testes E2E & Unitários",
+      "triggers": ["testes", "playwright", "vitest", "cypress", "e2e", "qa", "unitario", "testar"],
+      "min_matches": 2,
+      "skills": ["webapp-testing", "vitest-skill"]
+    }
+  }
+}

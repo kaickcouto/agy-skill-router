@@ -76,6 +76,13 @@ def remove_item(path: Path):
     if path.name == ".gitkeep":
         return
 
+    # Trava de segurança: impede exclusão fora de .agent/skills/
+    try:
+        path.absolute().relative_to(ACTIVE_DIR.absolute())
+    except ValueError:
+        print(f"[ALERTA DE SEGURANÇA] Bloqueada tentativa de remover fora do diretório ativo: {path}")
+        return
+
     path_str = str(path.absolute())
     try:
         # No Windows, remove junção ou symlink instantaneamente

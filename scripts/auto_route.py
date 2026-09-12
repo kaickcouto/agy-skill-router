@@ -24,73 +24,28 @@ MANIFEST_PATH = ROOT / "skills_manifest.json"
 sys.path.insert(0, str(SCRIPT_DIR))
 from manage_skills import add, reset, list_skills, pin, unpin, get_pinned, get_manifest
 
-UNRELATED_FRAMEWORKS = {
-    "angular", "vue", "svelte", "django", "laravel", "flutter",
-    "swift", "godot", "odoo", "wordpress", "drupal", "magento",
-    "spring", "ruby", "rails", "php", "csharp", "dotnet", "rust"
-}
+RULES_PATH = ROOT / "rules.json"
 
-GENERIC_TERMS = {
-    "python", "javascript", "typescript", "node", "code", "codigo",
-    "script", "funcao", "function", "arquivo", "file", "criar",
-    "fazer", "gerar", "escreva", "build", "create", "make", "task",
-    "ajustar", "modificar", "corrigir", "adicionar", "novo", "loop",
-    "loops", "logica", "explicar", "duvida", "ajuda", "array", "lista",
-    "while", "when", "with", "then", "also", "into", "from", "over",
-    "just", "more", "como", "funciona", "qual", "para"
-}
+UNRELATED_FRAMEWORKS = set()
+GENERIC_TERMS = set()
+SYNONYMS = {}
+SKILL_BUNDLES = {}
 
-SYNONYMS = {
-    "supabase-postgres-best-practices": ["supabase", "postgres", "postgresql", "rls", "migration", "migrations", "tabela", "tabelas", "sql", "politicas"],
-    "supabase": ["supabase", "postgres", "postgresql", "rls", "migration", "migrations", "tabela", "tabelas", "sql"],
-    "supabase-automation": ["supabase", "migration", "banco", "database"],
-    "tailwind-design-system": ["tailwind", "tailwindcss", "css", "layout", "responsivo", "estilo", "tema"],
-    "tailwind-patterns": ["tailwind", "tailwindcss", "css", "layout", "estilo", "componentes"],
-    "tanstack-query-expert": ["tanstack", "react-query", "query", "cache", "fetch", "mutacao"],
-    "zod-validation-expert": ["zod", "validacao", "schema", "schemas", "dto"],
-    "vitest-skill": ["vitest", "teste", "testes", "testar", "unitario", "unitarios", "mock", "mocking"],
-    "webapp-testing": ["teste", "testes", "testar", "cypress", "playwright", "e2e", "qa", "automatizar", "verificar"],
-    "pdf": ["pdf", "pdfs", "adobe", "ocr", "formulario", "formularios", "folha", "pagina", "devis", "relatorio"],
-    "xlsx": ["planilha", "planilhas", "excel", "tabela", "tabelas", "spreadsheet", "spreadsheets", "csv", "tsv", "colunas", "linhas", "formulas", "ppa", "bpu", "openpyxl", "pandas"],
-    "docx": ["word", "doc", "docx", "documento", "documentos", "texto", "redacao", "relatorio", "contrato", "oficio"],
-    "pptx": ["powerpoint", "apresentacao", "apresentacoes", "slides", "slide", "deck", "pitch"],
-    "frontend-design": ["frontend", "interface", "ui", "ux", "react", "componente", "componentes", "layout", "visual", "tela"],
-    "web-artifacts-builder": ["site", "aplicacao", "pagina", "webapp", "dashboard", "componente", "spa"],
-    "mcp-builder": ["mcp", "protocolo", "servidor", "conector", "integration", "tools"],
-    "canvas-design": ["poster", "banner", "cartaz", "arte", "ilustracao", "design", "grafico"],
-    "slack-gif-creator": ["gif", "animacao", "slack", "sticker", "frame"],
-    "brand-guidelines": ["marca", "identidade", "branding", "paleta", "cores", "padrao"],
-    "doc-coauthoring": ["coautoria", "revisao", "editorial", "redigir", "co-autor"],
-    "internal-comms": ["comunicacao", "comunicado", "anuncio", "newsletter", "memorando"]
-}
+def load_rules():
+    global UNRELATED_FRAMEWORKS, GENERIC_TERMS, SYNONYMS, SKILL_BUNDLES
+    if RULES_PATH.exists():
+        try:
+            with open(RULES_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                UNRELATED_FRAMEWORKS = set(data.get("unrelated_frameworks", []))
+                GENERIC_TERMS = set(data.get("generic_terms", []))
+                SYNONYMS = data.get("synonyms", {})
+                SKILL_BUNDLES = data.get("skill_bundles", {})
+                return
+        except Exception:
+            pass
 
-# Combos Coordenados de Skills (Dependency Bundles)
-SKILL_BUNDLES = {
-    "fullstack-supabase": {
-        "title": "Fullstack Supabase & React",
-        "triggers": ["crud", "supabase", "fullstack", "autenticacao", "dashboard", "bpu", "banco"],
-        "min_matches": 2,
-        "skills": ["supabase-postgres-best-practices", "frontend-design", "zod-validation-expert"]
-    },
-    "frontend-tailwind-ui": {
-        "title": "Frontend Tailwind & Design System",
-        "triggers": ["tailwind", "interface", "componentes", "layout", "responsivo", "estilo"],
-        "min_matches": 2,
-        "skills": ["tailwind-patterns", "frontend-design"]
-    },
-    "excel-data-reports": {
-        "title": "Ingestão Excel/PPA & Relatórios PDF",
-        "triggers": ["planilha", "excel", "devis", "ppa", "relatorio", "tabela", "openpyxl"],
-        "min_matches": 2,
-        "skills": ["xlsx", "pdf"]
-    },
-    "web-testing-suite": {
-        "title": "Suíte Completa de Testes E2E & Unitários",
-        "triggers": ["testes", "playwright", "vitest", "cypress", "e2e", "qa", "unitario", "testar"],
-        "min_matches": 2,
-        "skills": ["webapp-testing", "vitest-skill"]
-    }
-}
+load_rules()
 
 def normalize(text: str) -> str:
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("utf-8")
@@ -212,23 +167,27 @@ def get_index() -> BM25Index:
     if _GLOBAL_INDEX is not None:
         return _GLOBAL_INDEX
 
-    manifest_mtime = MANIFEST_PATH.stat().st_mtime if MANIFEST_PATH.exists() else 0
+    m_mtime = MANIFEST_PATH.stat().st_mtime if MANIFEST_PATH.exists() else 0
+    r_mtime = RULES_PATH.stat().st_mtime if RULES_PATH.exists() else 0
+    combined_mtime = (m_mtime, r_mtime)
+
     if CACHE_FILE.exists():
         try:
             with open(CACHE_FILE, "rb") as f:
                 cached_mtime, cached_index = pickle.load(f)
-            if cached_mtime == manifest_mtime:
+            if cached_mtime == combined_mtime:
                 _GLOBAL_INDEX = cached_index
                 return _GLOBAL_INDEX
         except Exception:
             pass
 
+    load_rules()
     manifest = get_manifest()
     _GLOBAL_INDEX = BM25Index(manifest)
     try:
         CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(CACHE_FILE, "wb") as f:
-            pickle.dump((manifest_mtime, _GLOBAL_INDEX), f)
+            pickle.dump((combined_mtime, _GLOBAL_INDEX), f)
     except Exception:
         pass
     return _GLOBAL_INDEX

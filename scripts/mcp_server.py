@@ -50,6 +50,10 @@ TOOLS_DEFINITIONS = [
                 }
             },
             "required": ["task"]
+        },
+        "annotations": {
+            "destructiveHint": False,
+            "openWorldHint": True
         }
     },
     {
@@ -58,6 +62,9 @@ TOOLS_DEFINITIONS = [
         "inputSchema": {
             "type": "object",
             "properties": {}
+        },
+        "annotations": {
+            "readOnlyHint": True
         }
     },
     {
@@ -72,6 +79,9 @@ TOOLS_DEFINITIONS = [
                     "default": False
                 }
             }
+        },
+        "annotations": {
+            "destructiveHint": True
         }
     },
     {
@@ -95,6 +105,9 @@ TOOLS_DEFINITIONS = [
                 }
             },
             "required": ["query"]
+        },
+        "annotations": {
+            "readOnlyHint": True
         }
     },
     {
@@ -109,6 +122,9 @@ TOOLS_DEFINITIONS = [
                 }
             },
             "required": ["skill_id"]
+        },
+        "annotations": {
+            "idempotentHint": True
         }
     },
     {
@@ -123,6 +139,9 @@ TOOLS_DEFINITIONS = [
                 }
             },
             "required": ["skill_id"]
+        },
+        "annotations": {
+            "idempotentHint": True
         }
     }
 ]
