@@ -11,9 +11,15 @@
     "ajustar", "modificar", "corrigir", "adicionar", "novo", "loop",
     "loops", "logica", "explicar", "duvida", "ajuda", "array", "lista",
     "while", "when", "with", "then", "also", "into", "from", "over",
-    "just", "more", "como", "funciona", "qual", "para"
+    "just", "more", "como", "funciona", "qual", "para", "let", "const",
+    "var", "somar", "soma", "simples", "numero", "numeros", "diferenca",
+    "exemplo", "exemplos", "dois", "tres", "print", "console", "log", "entre"
   ],
   "synonyms": {
+    "docker-expert": ["docker", "dockerfile", "container", "containerizar", "containerizacao", "compose", "multistage"],
+    "docker-compose-generator": ["docker", "dockerfile", "compose", "container"],
+    "cloud-k8s": ["kubernetes", "k8s", "manifesto", "cluster", "ingress", "deploy"],
+    "kubernetes-manifest-validator": ["kubernetes", "k8s", "manifesto", "ingress"],
     "supabase-postgres-best-practices": ["supabase", "postgres", "postgresql", "rls", "migration", "migrations", "tabela", "tabelas", "sql", "politicas"],
     "supabase": ["supabase", "postgres", "postgresql", "rls", "migration", "migrations", "tabela", "tabelas", "sql"],
     "supabase-automation": ["supabase", "migration", "banco", "database"],

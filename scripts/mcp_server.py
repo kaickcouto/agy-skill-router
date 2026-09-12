@@ -340,7 +340,8 @@ def main():
                     "result": {
                         "protocolVersion": PROTOCOL_VERSION,
                         "capabilities": {
-                            "tools": {}
+                            "tools": {},
+                            "resources": {}
                         },
                         "serverInfo": SERVER_INFO
                     }
@@ -364,7 +365,63 @@ def main():
                         "tools": TOOLS_DEFINITIONS
                     }
                 })
-            # 5. Call tool
+            # 5. List resources
+            elif method == "resources/list":
+                active_skills = []
+                if manage_skills.ACTIVE_DIR.exists():
+                    active_skills = [s.name for s in manage_skills.ACTIVE_DIR.iterdir() if s.name != ".gitkeep"]
+                resources = [
+                    {
+                        "uri": f"skills://active/{s}",
+                        "name": f"Active Skill: {s}",
+                        "mimeType": "text/markdown",
+                        "description": f"Instruções completas do arquivo SKILL.md para {s}"
+                    }
+                    for s in active_skills
+                ]
+                send_json({
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {
+                        "resources": resources
+                    }
+                })
+            # 6. Read resource
+            elif method == "resources/read":
+                uri = params.get("uri", "")
+                content = ""
+                mime = "text/markdown"
+                if uri.startswith("skills://active/"):
+                    sid = uri.replace("skills://active/", "").strip("/")
+                    md_path = manage_skills.ACTIVE_DIR / sid / "SKILL.md"
+                    if md_path.exists():
+                        content = md_path.read_text(encoding="utf-8", errors="ignore")
+                    else:
+                        content = f"[!] Arquivo SKILL.md não encontrado para a skill ativa '{sid}'."
+                elif uri.startswith("skills://vault/"):
+                    sid = uri.replace("skills://vault/", "").strip("/")
+                    md_path = manage_skills.VAULT_DIR / sid / "SKILL.md"
+                    if md_path.exists():
+                        content = md_path.read_text(encoding="utf-8", errors="ignore")
+                    else:
+                        content = f"[!] Arquivo SKILL.md não encontrado no vault para '{sid}'."
+                else:
+                    content = f"[!] URI não suportada: {uri}"
+
+                send_json({
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {
+                        "contents": [
+                            {
+                                "uri": uri,
+                                "mimeType": mime,
+                                "text": content
+                            }
+                        ]
+                    }
+                })
+            # 7. Call tool
             elif method == "tools/call":
                 tool_name = params.get("name")
                 tool_args = params.get("arguments", {})
