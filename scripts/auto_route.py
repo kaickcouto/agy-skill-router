@@ -3,6 +3,7 @@ import os
 import re
 import json
 import math
+import pickle
 import unicodedata
 from collections import Counter
 from pathlib import Path
@@ -16,8 +17,11 @@ if sys.platform == "win32":
         pass
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(SCRIPT_DIR))
+ROOT = SCRIPT_DIR.parent
+CACHE_FILE = ROOT / ".agent" / "index_cache.pkl"
+MANIFEST_PATH = ROOT / "skills_manifest.json"
 
+sys.path.insert(0, str(SCRIPT_DIR))
 from manage_skills import add, reset, list_skills, pin, unpin, get_pinned, get_manifest
 
 UNRELATED_FRAMEWORKS = {
@@ -60,6 +64,34 @@ SYNONYMS = {
     "internal-comms": ["comunicacao", "comunicado", "anuncio", "newsletter", "memorando"]
 }
 
+# Combos Coordenados de Skills (Dependency Bundles)
+SKILL_BUNDLES = {
+    "fullstack-supabase": {
+        "title": "Fullstack Supabase & React",
+        "triggers": ["crud", "supabase", "fullstack", "autenticacao", "dashboard", "bpu", "banco"],
+        "min_matches": 2,
+        "skills": ["supabase-postgres-best-practices", "frontend-design", "zod-validation-expert"]
+    },
+    "frontend-tailwind-ui": {
+        "title": "Frontend Tailwind & Design System",
+        "triggers": ["tailwind", "interface", "componentes", "layout", "responsivo", "estilo"],
+        "min_matches": 2,
+        "skills": ["tailwind-patterns", "frontend-design"]
+    },
+    "excel-data-reports": {
+        "title": "Ingestão Excel/PPA & Relatórios PDF",
+        "triggers": ["planilha", "excel", "devis", "ppa", "relatorio", "tabela", "openpyxl"],
+        "min_matches": 2,
+        "skills": ["xlsx", "pdf"]
+    },
+    "web-testing-suite": {
+        "title": "Suíte Completa de Testes E2E & Unitários",
+        "triggers": ["testes", "playwright", "vitest", "cypress", "e2e", "qa", "unitario", "testar"],
+        "min_matches": 2,
+        "skills": ["webapp-testing", "vitest-skill"]
+    }
+}
+
 def normalize(text: str) -> str:
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("utf-8")
     return text.lower()
@@ -86,16 +118,18 @@ class BM25Index:
             desc_tokens = tokenize(meta.get("description", ""))
             tag_tokens = [normalize(t) for t in meta.get("tags", [])]
             cat_tokens = tokenize(meta.get("category", ""))
+            block_tokens = tokenize(meta.get("thematic_block", ""))
             syn_tokens = [normalize(s) for s in SYNONYMS.get(sid, [])]
 
-            # Frequência ponderada de termos
             tf = Counter()
             for t in id_tokens:
                 tf[t] += 4.0
-            for t in cat_tokens:
-                tf[t] += 2.5
+            for t in block_tokens:
+                tf[t] += 3.0
             for t in syn_tokens:
                 tf[t] += 3.0
+            for t in cat_tokens:
+                tf[t] += 2.0
             for t in tag_tokens:
                 tf[t] += 2.0
             for t in desc_tokens:
@@ -116,7 +150,6 @@ class BM25Index:
         if not query_tokens:
             return []
 
-        # Identifica se a query é 100% genérica
         non_generic_query = [t for t in query_tokens if t not in GENERIC_TERMS]
 
         scores = []
@@ -129,7 +162,6 @@ class BM25Index:
             norm_id = normalize(sid)
             id_parts = set(norm_id.split("-"))
 
-            # Penalidade para framework não relacionado que não está na query
             has_unrelated = False
             for fw in UNRELATED_FRAMEWORKS:
                 if fw in id_parts and fw not in query_tokens:
@@ -149,26 +181,21 @@ class BM25Index:
 
                 f = tf[token]
                 n_t = self.df.get(token, 0)
-                # IDF com suavização
                 idf = math.log(1.0 + (self.N - n_t + 0.5) / (n_t + 0.5))
-                # BM25 tf normalization
                 denom = f + self.k1 * (1.0 - self.b + self.b * (doc_l / self.avgdl))
                 term_score = idf * (f * (self.k1 + 1.0)) / denom
 
-                # Se for termo genérico, amortece peso
                 if token in GENERIC_TERMS:
                     term_score *= 0.15
 
                 score += term_score
                 matched_terms.append(token)
 
-            # Bônus se houver match exato do nome ou de sinônimo forte
             if norm_id in query_tokens:
                 score += 10.0
             elif any(s in query_tokens for s in SYNONYMS.get(sid, [])):
                 score += 5.0
 
-            # Se todos os matches forem termos genéricos e sem termos técnicos no prompt, anula
             if matched_terms and all(m in GENERIC_TERMS for m in matched_terms) and not non_generic_query:
                 score = 0.0
 
@@ -182,18 +209,43 @@ _GLOBAL_INDEX = None
 
 def get_index() -> BM25Index:
     global _GLOBAL_INDEX
-    if _GLOBAL_INDEX is None:
-        manifest = get_manifest()
-        _GLOBAL_INDEX = BM25Index(manifest)
+    if _GLOBAL_INDEX is not None:
+        return _GLOBAL_INDEX
+
+    manifest_mtime = MANIFEST_PATH.stat().st_mtime if MANIFEST_PATH.exists() else 0
+    if CACHE_FILE.exists():
+        try:
+            with open(CACHE_FILE, "rb") as f:
+                cached_mtime, cached_index = pickle.load(f)
+            if cached_mtime == manifest_mtime:
+                _GLOBAL_INDEX = cached_index
+                return _GLOBAL_INDEX
+        except Exception:
+            pass
+
+    manifest = get_manifest()
+    _GLOBAL_INDEX = BM25Index(manifest)
+    try:
+        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(CACHE_FILE, "wb") as f:
+            pickle.dump((manifest_mtime, _GLOBAL_INDEX), f)
+    except Exception:
+        pass
     return _GLOBAL_INDEX
 
-def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = False, category: str = None, block: str = None):
-    index = get_index()
-    results = index.score(prompt, category_filter=category, block_filter=block)
-    pinned = get_pinned()
+def check_bundles(query: str) -> tuple[str, list[str]]:
+    """Verifica se a tarefa se qualifica para um Bundle Coordenado de Skills."""
+    tokens = set(tokenize(query))
+    for b_id, b_meta in SKILL_BUNDLES.items():
+        matches = sum(1 for trig in b_meta["triggers"] if trig in tokens)
+        if matches >= b_meta["min_matches"]:
+            return b_id, b_meta["skills"]
+    return None, []
 
-    selected_results = [r for r in results if r[0] >= threshold][:top_k]
-    selected_ids = [r[1] for r in selected_results]
+def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = False, category: str = None, block: str = None):
+    # 1. Verifica se dispara um Bundle Coordenado
+    bundle_id, bundle_skills = check_bundles(prompt)
+    pinned = get_pinned()
 
     print(f"[*] Tarefa: '{prompt}'")
     if block:
@@ -203,9 +255,23 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
 
     reset()
 
+    activated = []
+    if bundle_id:
+        b_title = SKILL_BUNDLES[bundle_id]["title"]
+        print(f"[BUNDLE] Combo Ativado: '{b_title}' -> {', '.join(bundle_skills)}")
+        activated = add(bundle_skills)
+        return {"bundle": bundle_id, "activated": activated, "pinned": list(pinned)}
+
+    # 2. Roteamento BM25 por Relevância
+    index = get_index()
+    results = index.score(prompt, category_filter=category, block_filter=block)
+
+    selected_results = [r for r in results if r[0] >= threshold][:top_k]
+    selected_ids = [r[1] for r in selected_results]
+
     if selected_ids:
         print(f"[*] Roteando automaticamente para: {', '.join(selected_ids)}")
-        add(selected_ids)
+        activated = add(selected_ids)
     else:
         if pinned:
             print(f"[*] Nenhuma nova skill especializada requerida (mantidas {len(pinned)} fixadas).")
@@ -222,17 +288,22 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
             status_str = "[SELECIONADA]" if sid in selected_ids else "[DESCARTADA]"
             print(f"  {status_str} Score: {score:5.2f} | ID: {sid:30} | Bloco: {cat:15} | Matches: {', '.join(matches)}")
 
+    return {"bundle": None, "activated": activated, "pinned": list(pinned), "results": results[:5]}
+
 def search(query: str, top_k: int = 10, category: str = None, block: str = None):
     index = get_index()
     results = index.score(query, category_filter=category, block_filter=block)
     label = f"no bloco '{block}'" if block else (f"na categoria '{category}'" if category else "")
     print(f"[*] Busca por: '{query}' {label}".strip())
     print(f"[*] Encontradas: {len(results)} skills compatíveis")
+    output = []
     for score, sid, matches in results[:top_k]:
         meta = index.manifest.get(sid, {})
         blk = meta.get("thematic_block", "tools")
         desc = meta.get("description", "")[:90] + "..."
         print(f"  [{score:4.1f}] {sid:30} ({blk}) -> {desc}")
+        output.append({"score": round(score, 2), "id": sid, "block": blk, "description": meta.get("description", ""), "matches": matches})
+    return output
 
 def status():
     manifest = get_manifest()

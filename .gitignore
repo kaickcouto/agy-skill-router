@@ -6,3 +6,5 @@ skills_quarantine/
 _temp_sources/
 .agent/skills/*
 !.agent/skills/.gitkeep
+.agent/index_cache.pkl
+.agent/.pinned.json

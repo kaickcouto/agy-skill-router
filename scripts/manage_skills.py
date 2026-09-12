@@ -75,10 +75,47 @@ def unpin(ids: list[str]):
 def remove_item(path: Path):
     if path.name == ".gitkeep":
         return
-    if path.is_symlink() or path.is_file():
-        path.unlink()
-    elif path.is_dir():
-        shutil.rmtree(path, ignore_errors=True)
+
+    path_str = str(path.absolute())
+    try:
+        # No Windows, remove junção ou symlink instantaneamente
+        os.unlink(path_str)
+        return
+    except OSError:
+        pass
+
+    try:
+        if path.is_dir():
+            shutil.rmtree(path_str, ignore_errors=True)
+        elif path.is_file():
+            path.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+def link_directory(src: Path, dst: Path):
+    """Cria ponteiro instantâneo (Symlink ou Windows Directory Junction) sem cópia física."""
+    # 1. Tenta symlink padrão
+    try:
+        os.symlink(src, dst, target_is_directory=src.is_dir())
+        return "symlink"
+    except OSError:
+        pass
+
+    # 2. Windows Directory Junction (0ms, sem privilégios de Administrador)
+    if sys.platform == "win32" and src.is_dir():
+        try:
+            import _winapi
+            _winapi.CreateJunction(str(src.resolve()), str(dst.absolute()))
+            return "junction"
+        except Exception:
+            pass
+
+    # 3. Fallback cópia física
+    if src.is_dir():
+        shutil.copytree(src, dst)
+    else:
+        shutil.copy2(src, dst)
+    return "copy"
 
 def add(ids: list[str]) -> list[str]:
     load_env()
@@ -110,14 +147,8 @@ def add(ids: list[str]) -> list[str]:
             print(f"[X] Bloqueada '{sid}': Faltam variáveis no .env -> {', '.join(missing)}")
             continue
 
-        try:
-            os.symlink(src, dst, target_is_directory=src.is_dir())
-        except OSError:
-            if src.is_dir():
-                shutil.copytree(src, dst)
-            else:
-                shutil.copy2(src, dst)
-        print(f"[+] Ativada: {sid}")
+        method = link_directory(src, dst)
+        print(f"[+] Ativada ({method}): {sid}")
         activated.append(sid)
     return activated
 
