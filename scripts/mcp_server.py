@@ -43,7 +43,7 @@ TOOLS_DEFINITIONS = [
                 },
                 "top_k": {
                     "type": "integer",
-                    "description": "Número máximo de skills a ativar (padrão: 2).",
+                    "description": "Número de skills a ativar (padrão: 2). Para tarefas complexas ou multi-stack (ex: Banco + Frontend + Testes), passe 3, 4 ou até 6.",
                     "default": 2
                 },
                 "block": {
@@ -226,7 +226,7 @@ def scoped_workspace(ws_arg: str | None):
 
 def handle_route_skills(arguments: dict) -> dict:
     task = str(arguments.get("task") or "").strip()
-    top_k = safe_int(arguments.get("top_k"), default=2, min_val=1, max_val=5)
+    top_k = safe_int(arguments.get("top_k"), default=2, min_val=1, max_val=8)
     block = str(arguments.get("block")).strip() if arguments.get("block") else None
     ws = arguments.get("workspace_dir")
 

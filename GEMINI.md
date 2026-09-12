@@ -6,7 +6,8 @@ Este projeto opera como o roteador dinâmico de habilidades técnicas do Antigra
 
 1. **Roteamento de Demanda**:
    - Antes de iniciar qualquer tarefa técnica especializada (Supabase, Postgres, Tailwind, Testes E2E, Docker, Planilhas Excel/PDF), chame a tool MCP `route_skills(task='...')` ou execute `python scripts/auto_route.py '<tarefa>'`.
-   - Isso injetará instantaneamente as 1–2 skills especializadas em `.agent/skills/` via Windows Directory Junctions (0ms).
+   - **Tarefas Complexas**: Para demandas multi-stack (ex: Banco + Frontend + Testes), passe `top_k=3` a `6` em `route_skills(task='...', top_k=4)` ou no CLI com `--top-k 4`.
+   - Isso injetará instantaneamente as skills especializadas em `.agent/skills/` via Windows Directory Junctions (0ms).
 
 2. **Inspeção de Documentação da Skill**:
    - Para entender os gatilhos e regras de uma skill antes de aplicá-la, consulte a tool MCP `skill_info(skill_id)` ou leia o recurso `skills://active/<skill_id>`.
