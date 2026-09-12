@@ -114,5 +114,21 @@
       "service": "Módulo de Dashboard e Gráficos",
       "skills": ["frontend-design", "tailwind-patterns"]
     }
-  }
+  },
+  "official_whitelist": [
+    "pdf", "xlsx", "docx", "pptx", "frontend-design", "webapp-testing",
+    "mcp-builder", "canvas-design", "algorithmic-art", "brand-guidelines",
+    "doc-coauthoring", "internal-comms", "slack-gif-creator", "theme-factory",
+    "web-artifacts-builder", "claude-api", "academy-guide"
+  ],
+  "blocked_domains_regex": [
+    "(^|-)(marketing|copywriting|seo|affiliate|growth|funnel|dropship|influencer|viral|content-strategist|blogwriting)($|-)",
+    "(^|-)(ad|ads|campaign|advertis)($|-)",
+    "(^|-)(odoo|salesforce|sap|drupal|magento|wordpress|shopify|makepad|crossframe)($|-)",
+    "(^|-)(crypto|solidity|web3|nft|token|blockchain|yield)($|-)",
+    "(^|-)(health|diet|fitness|dating|travel|weightloss|recipe|tarot|astrology|psycholog)($|-)",
+    "(^|-)(andruia|accint|xiaohongshu|wechat|douyin|taisly)($|-)",
+    "azure-.*-(java|dotnet|csharp)",
+    "-(java|dotnet|csharp)$"
+  ]
 }

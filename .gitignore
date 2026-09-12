@@ -8,5 +8,7 @@ _temp_sources/
 !.agent/skills/.gitkeep
 .agent/index_cache.pkl
 .agent/.pinned.json
+.agent/.router_session.json
+.agent/hooks.json
 repo_context.txt
 repomix-output.*

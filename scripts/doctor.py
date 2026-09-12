@@ -46,7 +46,7 @@ def run_doctor():
             import _winapi
             _winapi.CreateJunction(str(temp_src.resolve()), str(temp_dst.absolute()))
             junction_ok = temp_dst.exists()
-            os.unlink(str(temp_dst.absolute()))
+            os.rmdir(str(temp_dst.absolute()))
         else:
             os.symlink(temp_src, temp_dst, target_is_directory=True)
             junction_ok = temp_dst.exists()

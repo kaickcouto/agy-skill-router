@@ -212,23 +212,32 @@ def safe_int(val, default: int = 2, min_val: int = 1, max_val: int = 10) -> int:
     except (ValueError, TypeError):
         return default
 
+@contextlib.contextmanager
+def scoped_workspace(ws_arg: str | None):
+    old_ws = manage_skills.CURRENT_WORKSPACE
+    try:
+        if ws_arg and isinstance(ws_arg, str):
+            ws_path = Path(ws_arg).resolve()
+            if ws_path.exists() and ws_path.is_dir():
+                manage_skills.set_workspace(ws_path)
+        yield
+    finally:
+        manage_skills.CURRENT_WORKSPACE = old_ws
+
 def handle_route_skills(arguments: dict) -> dict:
     task = str(arguments.get("task") or "").strip()
     top_k = safe_int(arguments.get("top_k"), default=2, min_val=1, max_val=5)
     block = str(arguments.get("block")).strip() if arguments.get("block") else None
     ws = arguments.get("workspace_dir")
-    if ws and isinstance(ws, str):
-        ws_path = Path(ws).resolve()
-        if ws_path.exists() and ws_path.is_dir():
-            manage_skills.set_workspace(ws_path)
 
-    stdout_text, res = capture_execution(
-        auto_route.route,
-        prompt=task,
-        top_k=top_k,
-        explain=True,
-        block=block
-    )
+    with scoped_workspace(ws):
+        stdout_text, res = capture_execution(
+            auto_route.route,
+            prompt=task,
+            top_k=top_k,
+            explain=True,
+            block=block
+        )
 
     activated = res.get("activated", []) if res else []
     summary_message = (
@@ -257,38 +266,36 @@ def handle_route_skills(arguments: dict) -> dict:
 
 def handle_list_skills(arguments: dict) -> dict:
     ws = arguments.get("workspace_dir")
-    if ws:
-        manage_skills.set_workspace(ws)
-    stdout_text, active = capture_execution(manage_skills.list_skills)
-    pinned = list(manage_skills.get_pinned())
-    return {
-        "content": [
-            {
-                "type": "text",
-                "text": json.dumps({
-                    "workspace": str(manage_skills.get_active_dir().parent),
-                    "active_skills": active,
-                    "pinned_skills": pinned,
-                    "details": stdout_text
-                }, ensure_ascii=False, indent=2)
-            }
-        ]
-    }
+    with scoped_workspace(ws):
+        stdout_text, active = capture_execution(manage_skills.list_skills)
+        pinned = list(manage_skills.get_pinned())
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps({
+                        "workspace": str(manage_skills.get_active_dir().parent),
+                        "active_skills": active,
+                        "pinned_skills": pinned,
+                        "details": stdout_text
+                    }, ensure_ascii=False, indent=2)
+                }
+            ]
+        }
 
 def handle_reset_skills(arguments: dict) -> dict:
     ws = arguments.get("workspace_dir")
-    if ws:
-        manage_skills.set_workspace(ws)
     force = bool(arguments.get("force", False))
-    stdout_text, _ = capture_execution(manage_skills.reset, force=force)
-    return {
-        "content": [
-            {
-                "type": "text",
-                "text": stdout_text or "Reset concluído com sucesso."
-            }
-        ]
-    }
+    with scoped_workspace(ws):
+        stdout_text, _ = capture_execution(manage_skills.reset, force=force)
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": stdout_text or "Reset concluído com sucesso."
+                }
+            ]
+        }
 
 def handle_search_skills(arguments: dict) -> dict:
     query = str(arguments.get("query") or "").strip()
@@ -357,19 +364,16 @@ def handle_apply_preset(arguments: dict) -> dict:
     if not re.match(r'^[a-zA-Z0-9_\-]+$', pname):
         raise ValueError(f"preset_name inválido '{pname}': use apenas letras, números e hífens.")
     ws = arguments.get("workspace_dir")
-    if ws and isinstance(ws, str):
-        ws_path = Path(ws).resolve()
-        if ws_path.exists() and ws_path.is_dir():
-            manage_skills.set_workspace(ws_path)
-    stdout_text, ok = capture_execution(auto_route.apply_preset, pname)
-    return {
-        "content": [
-            {
-                "type": "text",
-                "text": stdout_text
-            }
-        ]
-    }
+    with scoped_workspace(ws):
+        stdout_text, ok = capture_execution(auto_route.apply_preset, pname)
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": stdout_text
+                }
+            ]
+        }
 
 TOOL_HANDLERS = {
     "route_skills": handle_route_skills,
@@ -482,19 +486,35 @@ def main():
                 mime = "text/markdown"
                 cur_active = manage_skills.get_active_dir()
                 if uri.startswith("skills://active/"):
-                    sid = uri.replace("skills://active/", "").strip("/")
-                    md_path = cur_active / sid / "SKILL.md"
-                    if md_path.exists():
-                        content = md_path.read_text(encoding="utf-8", errors="ignore")
-                    else:
-                        content = f"[!] Arquivo SKILL.md não encontrado para '{sid}' em {cur_active}."
+                    raw_sid = uri.replace("skills://active/", "").strip("/")
+                    try:
+                        sid = validate_skill_id(raw_sid)
+                        target_dir = (cur_active / sid).resolve()
+                        if not target_dir.is_relative_to(cur_active.resolve()):
+                            content = f"[!] Acesso negado: Tentativa de Path Traversal detectada em '{raw_sid}'."
+                        else:
+                            md_path = target_dir / "SKILL.md"
+                            if md_path.exists():
+                                content = md_path.read_text(encoding="utf-8", errors="ignore")
+                            else:
+                                content = f"[!] Arquivo SKILL.md não encontrado para '{sid}' em {cur_active}."
+                    except ValueError as ve:
+                        content = f"[!] ID de skill inválido: {str(ve)}"
                 elif uri.startswith("skills://vault/"):
-                    sid = uri.replace("skills://vault/", "").strip("/")
-                    md_path = manage_skills.VAULT_DIR / sid / "SKILL.md"
-                    if md_path.exists():
-                        content = md_path.read_text(encoding="utf-8", errors="ignore")
-                    else:
-                        content = f"[!] Arquivo SKILL.md não encontrado no vault para '{sid}'."
+                    raw_sid = uri.replace("skills://vault/", "").strip("/")
+                    try:
+                        sid = validate_skill_id(raw_sid)
+                        target_dir = (manage_skills.VAULT_DIR / sid).resolve()
+                        if not target_dir.is_relative_to(manage_skills.VAULT_DIR.resolve()):
+                            content = f"[!] Acesso negado: Tentativa de Path Traversal detectada em '{raw_sid}'."
+                        else:
+                            md_path = target_dir / "SKILL.md"
+                            if md_path.exists():
+                                content = md_path.read_text(encoding="utf-8", errors="ignore")
+                            else:
+                                content = f"[!] Arquivo SKILL.md não encontrado no vault para '{sid}'."
+                    except ValueError as ve:
+                        content = f"[!] ID de skill inválido: {str(ve)}"
                 else:
                     content = f"[!] URI não suportada: {uri}"
 

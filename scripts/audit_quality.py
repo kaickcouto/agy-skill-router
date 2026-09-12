@@ -28,25 +28,38 @@ GENERIC_TEMPLATE_PHRASES = [
     "<placeholder>"
 ]
 
-OFFICIAL_WHITELIST = {
-    "pdf", "xlsx", "docx", "pptx", "frontend-design", "webapp-testing",
-    "mcp-builder", "canvas-design", "algorithmic-art", "brand-guidelines",
-    "doc-coauthoring", "internal-comms", "slack-gif-creator", "theme-factory",
-    "web-artifacts-builder", "claude-api", "academy-guide"
-}
+RULES_PATH = ROOT / "rules.json"
 
-BLOCKED_REGEX = [
-    r'(^|-)(marketing|copywriting|seo|affiliate|growth|funnel|dropship|influencer|viral|content-strategist|blogwriting)($|-)',
-    r'(^|-)(ad|ads|campaign|advertis)($|-)',
-    r'(^|-)(odoo|salesforce|sap|drupal|magento|wordpress|shopify|makepad|crossframe)($|-)',
-    r'(^|-)(crypto|solidity|web3|nft|token|blockchain|yield)($|-)',
-    r'(^|-)(health|diet|fitness|dating|travel|weightloss|recipe|tarot|astrology|psycholog)($|-)',
-    r'(^|-)(andruia|accint|xiaohongshu|wechat|douyin|taisly)($|-)',
-    r'azure-.*-(java|dotnet|csharp)',
-    r'-(java|dotnet|csharp)$'
-]
+def load_audit_rules():
+    whitelist = {
+        "pdf", "xlsx", "docx", "pptx", "frontend-design", "webapp-testing",
+        "mcp-builder", "canvas-design", "algorithmic-art", "brand-guidelines",
+        "doc-coauthoring", "internal-comms", "slack-gif-creator", "theme-factory",
+        "web-artifacts-builder", "claude-api", "academy-guide"
+    }
+    blocked_patterns = [
+        r'(^|-)(marketing|copywriting|seo|affiliate|growth|funnel|dropship|influencer|viral|content-strategist|blogwriting)($|-)',
+        r'(^|-)(ad|ads|campaign|advertis)($|-)',
+        r'(^|-)(odoo|salesforce|sap|drupal|magento|wordpress|shopify|makepad|crossframe)($|-)',
+        r'(^|-)(crypto|solidity|web3|nft|token|blockchain|yield)($|-)',
+        r'(^|-)(health|diet|fitness|dating|travel|weightloss|recipe|tarot|astrology|psycholog)($|-)',
+        r'(^|-)(andruia|accint|xiaohongshu|wechat|douyin|taisly)($|-)',
+        r'azure-.*-(java|dotnet|csharp)',
+        r'-(java|dotnet|csharp)$'
+    ]
+    if RULES_PATH.exists():
+        try:
+            with open(RULES_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if "official_whitelist" in data:
+                    whitelist = set(data["official_whitelist"])
+                if "blocked_domains_regex" in data:
+                    blocked_patterns = data["blocked_domains_regex"]
+        except Exception:
+            pass
+    return whitelist, [re.compile(p, re.IGNORECASE) for p in blocked_patterns]
 
-COMPILED_BLOCKED = [re.compile(p, re.IGNORECASE) for p in BLOCKED_REGEX]
+OFFICIAL_WHITELIST, COMPILED_BLOCKED = load_audit_rules()
 
 def calculate_quality_score(skill_dir: Path) -> tuple[int, list[str]]:
     if skill_dir.name in OFFICIAL_WHITELIST:

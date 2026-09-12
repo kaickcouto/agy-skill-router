@@ -153,6 +153,15 @@ def remove_item(path: Path):
         return
 
     path_str = str(path.absolute())
+
+    # No Windows, a API segura para remover junções de diretório sem afetar o alvo é RemoveDirectory (os.rmdir)
+    if sys.platform == "win32" and is_junction_or_link(path):
+        try:
+            os.rmdir(path_str)
+            return
+        except OSError:
+            pass
+
     try:
         os.unlink(path_str)
         return

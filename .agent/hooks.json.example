@@ -1,0 +1,10 @@
+{
+  "agy-skill-cleanup": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "\"<PYTHON_EXECUTABLE>\" \"<PATH_TO_ROUTER>/scripts/auto_route.py\" reset"
+      }
+    ]
+  }
+}

@@ -19,9 +19,31 @@ VAULT_DIR = ROOT / "skills_vault"
 QUARANTINE_DIR = ROOT / "skills_quarantine"
 MANIFEST_PATH = ROOT / "skills_manifest.json"
 
-DANGEROUS_PATTERNS = {
-    "eval(", "exec(", "pty.spawn", "socket.connect", "shutil.rmtree('/"
-}
+class SecurityASTVisitor(ast.NodeVisitor):
+    def __init__(self):
+        self.issues = []
+
+    def visit_Call(self, node):
+        if isinstance(node.func, ast.Name) and node.func.id in {"eval", "exec", "compile"}:
+            self.issues.append(f"Chamada direta a '{node.func.id}()'")
+        elif isinstance(node.func, ast.Attribute):
+            if node.func.attr == "spawn" and isinstance(node.func.value, ast.Name) and node.func.value.id == "pty":
+                self.issues.append("Chamada a 'pty.spawn()'")
+            elif node.func.attr == "rmtree" and isinstance(node.func.value, ast.Name) and node.func.value.id == "shutil":
+                if node.args and isinstance(node.args[0], ast.Constant) and node.args[0].value in {"/", "\\"}:
+                    self.issues.append("Chamada destrutiva a 'shutil.rmtree('/')'")
+        self.generic_visit(node)
+
+    def visit_Import(self, node):
+        for alias in node.names:
+            if alias.name in {"pty"}:
+                self.issues.append(f"Importação de módulo inseguro '{alias.name}'")
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node):
+        if node.module in {"pty"}:
+            self.issues.append(f"Importação de módulo inseguro '{node.module}'")
+        self.generic_visit(node)
 
 STOP_WORDS = {
     "and", "the", "for", "with", "this", "that", "from", "you", "use",
@@ -33,14 +55,15 @@ def analyze_code_security(code: str, filename: str) -> tuple[bool, str, list[str
     if filename.endswith("__init__.py") or not code.strip():
         return True, "Aprovada", []
 
-    for pattern in DANGEROUS_PATTERNS:
-        if pattern in code:
-            return False, f"Padrão inseguro detectado: {pattern}", []
-
     try:
-        ast.parse(code)
+        tree = ast.parse(code)
     except SyntaxError:
         return False, "Erro de sintaxe Python", []
+
+    visitor = SecurityASTVisitor()
+    visitor.visit(tree)
+    if visitor.issues:
+        return False, f"Padrão inseguro detectado: {', '.join(visitor.issues)}", []
 
     env_matches = re.findall(r'os\.(?:environ\["([^"]+)"\]|getenv\(["\']([^"\']+)["\'])', code)
     detected_envs = list({k for tup in env_matches for k in tup if k})

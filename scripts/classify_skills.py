@@ -81,21 +81,26 @@ def clean_trigger(text: str) -> str:
 def extract_triggers_and_intent(content: str, desc: str, skill_id: str) -> tuple[str, list[str], list[str]]:
     triggers = []
 
-    # 1. Busca seções estruturadas no markdown
+    # 1. Busca seções estruturadas no markdown (delimitado a 1500 chars / 25 linhas)
     sections = re.findall(r'##\s*(?:When to (?:Use|Apply)|Triggers|Use Cases)(.*?)(?=\n##|\Z)', content, re.DOTALL | re.IGNORECASE)
     for sec in sections:
-        for line in sec.splitlines():
+        lines = sec.strip()[:1500].splitlines()[:25]
+        for line in lines:
             line = line.strip()
             if line.startswith(('-', '*', '•')) and len(line) > 5:
                 ct = clean_trigger(line)
                 if ct and ct not in triggers and len(ct) > 4:
                     triggers.append(ct)
+                    if len(triggers) >= 5:
+                        break
+        if len(triggers) >= 5:
+            break
 
-    # 2. Se não encontrou bullets, busca em frases descritivas dentro das seções
+    # 2. Se não encontrou bullets, busca em frases descritivas dentro das seções delimitadas
     if not triggers:
         for sec in sections:
-            # Procura sentenças dentro da seção
-            for sent in re.split(r'[;\n]', sec):
+            bounded_sec = sec.strip()[:1500]
+            for sent in re.split(r'[;\n]', bounded_sec):
                 sent = sent.strip()
                 if len(sent) > 15 and not sent.startswith('#'):
                     ct = clean_trigger(sent)
@@ -103,6 +108,8 @@ def extract_triggers_and_intent(content: str, desc: str, skill_id: str) -> tuple
                         triggers.append(ct)
                         if len(triggers) >= 3:
                             break
+            if triggers:
+                break
 
     # 3. Fallback: extrai do campo 'description'
     if not triggers and desc:
