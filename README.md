@@ -1,6 +1,6 @@
 # AGY Skill Router 🚀
 
-Roteador dinâmico de habilidades técnicas sob demanda para agentes de IA (**Google Antigravity (AGY)**, Claude Desktop, Cursor e outros).
+Roteador dinâmico de habilidades técnicas sob demanda desenvolvido sob medida para o **Google Antigravity (AGY)**.
 
 Projetado para eliminar o consumo excessivo de tokens: mantém **1.312 skills especializadas** repousando no Vault (custo zero de contexto) e injeta cirurgicamente apenas as 1–2 skills necessárias via **Windows Directory Junctions / Symlinks (0ms)**, com auto-limpeza após cada tarefa.
 
@@ -81,9 +81,9 @@ python scripts/doctor.py
 
 ---
 
-## 🔌 Configuração MCP (Model Context Protocol)
+## 🔌 Configuração MCP no Antigravity
 
-O script de setup registra o servidor automaticamente no seu `mcp_config.json` global do Antigravity. Caso utilize outro cliente (Claude Desktop, Cursor), adicione manualmente:
+O script `scripts/setup_agy.py` registra o servidor automaticamente no arquivo global do Antigravity (`~/.gemini/config/mcp_config.json`). Caso queira verificar ou configurar manualmente:
 
 ```json
 {
