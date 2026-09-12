@@ -143,7 +143,7 @@ def is_domain_blocked(skill_name: str) -> tuple[bool, str]:
             return True, f"Domínio descartado ({rgx.pattern})"
     return False, ""
 
-def run_audit(dry_run: bool = True, min_score: int = 60, engineering_only: bool = True):
+def run_audit(dry_run: bool = True, min_score: int = 60, engineering_only: bool = True, top_limit: int = None):
     print(f"[*] Iniciando Auditoria Bidirecional (Vault & Quarentena)...")
     print(f"[*] Filtro de Engenharia: {'ATIVO (foco em desenvolvimento e dados)' if engineering_only else 'DESATIVADO'}")
     print(f"[*] Corte Mínimo: {min_score} pts")
@@ -172,10 +172,38 @@ def run_audit(dry_run: bool = True, min_score: int = 60, engineering_only: bool 
                 continue
 
         score, reasons = calculate_quality_score(path)
+        
+        # Coleta contagem de código e tamanho total para desempate
+        doc = path / "SKILL.md"
+        doc_text = doc.read_text(encoding="utf-8", errors="ignore") if doc.exists() else ""
+        ref_dir = path / "references"
+        ref_text = " ".join(f.read_text(encoding="utf-8", errors="ignore") for f in ref_dir.glob("*.md")) if ref_dir.exists() else ""
+        full_text = doc_text + " " + ref_text
+        code_blocks = len(re.findall(r'```[a-zA-Z0-9_\-]+', full_text))
+        total_size = len(full_text)
+
         if score >= min_score or name_lower in OFFICIAL_WHITELIST:
-            to_vault.append((score, path, current_loc))
+            to_vault.append((score, path, current_loc, code_blocks, total_size))
         else:
             to_quarantine.append((score, path, reasons, current_loc))
+
+    # Se houver limite estrito (ex: top 550)
+    if top_limit and len(to_vault) > top_limit:
+        print(f"[*] Aplicando corte de elite para exatamente Top {top_limit} skills...")
+        # Ordena: Oficiais Anthropic primeiro (score 200), depois score, depois número de códigos, depois tamanho
+        to_vault.sort(key=lambda x: (
+            200 if x[1].name.lower() in OFFICIAL_WHITELIST else x[0],
+            x[3],
+            x[4]
+        ), reverse=True)
+
+        cutoff_vault = to_vault[:top_limit]
+        overflow = to_vault[top_limit:]
+        
+        for sc, path, loc, cb, sz in overflow:
+            to_quarantine.append((sc, path, [f"Fora do Top {top_limit} de densidade técnica"], loc))
+        
+        to_vault = cutoff_vault
 
     print("\n" + "="*55)
     print(f"[*] Total de Skills Avaliadas: {len(all_skills)}")
@@ -190,8 +218,8 @@ def run_audit(dry_run: bool = True, min_score: int = 60, engineering_only: bool 
         restored = 0
         quarantined = 0
 
-        # Move aprovadas da quarentena de volta para o vault se necessário
-        for sc, path, loc in to_vault:
+        for item in to_vault:
+            sc, path, loc = item[0], item[1], item[2]
             if loc == "quarantine":
                 dst = VAULT_DIR / path.name
                 if dst.exists():
@@ -199,8 +227,8 @@ def run_audit(dry_run: bool = True, min_score: int = 60, engineering_only: bool 
                 shutil.move(str(path), str(dst))
                 restored += 1
 
-        # Move reprovadas do vault para quarentena
-        for sc, path, reasons, loc in to_quarantine:
+        for item in to_quarantine:
+            sc, path, reasons, loc = item[0], item[1], item[2], item[3]
             if loc == "vault":
                 dst = QUARANTINE_DIR / path.name
                 if dst.exists():
@@ -208,7 +236,7 @@ def run_audit(dry_run: bool = True, min_score: int = 60, engineering_only: bool 
                 shutil.move(str(path), str(dst))
                 quarantined += 1
 
-        print(f"\n[OK] Ajuste bidirecional aplicado:")
+        print(f"\n[OK] Ajuste de elite aplicado:")
         print(f"    - Restauradas para o Vault: {restored}")
         print(f"    - Enviadas para Quarentena: {quarantined}")
         print("[*] Reexecutando scripts/setup_skills.py para atualizar o manifesto...")
@@ -219,8 +247,11 @@ if __name__ == "__main__":
     apply_changes = "--apply" in sys.argv
     eng_only = "--all" not in sys.argv
     min_score = 60
+    top_limit = None
     for arg in sys.argv:
         if arg.startswith("--min-score="):
             min_score = int(arg.split("=")[1])
+        elif arg.startswith("--top="):
+            top_limit = int(arg.split("=")[1])
 
-    run_audit(dry_run=not apply_changes, min_score=min_score, engineering_only=eng_only)
+    run_audit(dry_run=not apply_changes, min_score=min_score, engineering_only=eng_only, top_limit=top_limit)

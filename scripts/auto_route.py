@@ -31,7 +31,9 @@ GENERIC_TERMS = {
     "script", "funcao", "function", "arquivo", "file", "criar",
     "fazer", "gerar", "escreva", "build", "create", "make", "task",
     "ajustar", "modificar", "corrigir", "adicionar", "novo", "loop",
-    "loops", "logica", "explicar", "duvida", "ajuda", "array", "lista"
+    "loops", "logica", "explicar", "duvida", "ajuda", "array", "lista",
+    "while", "when", "with", "then", "also", "into", "from", "over",
+    "just", "more", "como", "funciona", "qual", "para"
 }
 
 SYNONYMS = {
