@@ -17,6 +17,11 @@ VAULT_DIR = ROOT / "skills_vault"
 MANIFEST_PATH = ROOT / "skills_manifest.json"
 
 THEMATIC_BLOCKS = {
+    "general-tools": {
+        "title": "Ferramentas Gerais",
+        "keywords": [],
+        "min_confidence": 3.0
+    },
     "core-frontend": {
         "title": "Frontend & Interface",
         "keywords": ["react", "nextjs", "vite", "tailwind", "css", "html", "ui", "ux", "component", "zustand", "redux", "web"],
@@ -55,42 +60,36 @@ THEMATIC_BLOCKS = {
 }
 
 class TriMindJudge:
-    """Sistema de 3 Mentes para Arbitragem e Classificação de Skills."""
-
     @staticmethod
     def advocate_view(skill_id: str, desc: str, tags: list[str], block: str) -> dict:
-        """Mente 1: Advogado (Lado Bom / Oportunidade)"""
-        hits = [k for k in THEMATIC_BLOCKS[block]["keywords"] if k in f"{skill_id} {desc} {' '.join(tags)}".lower()]
+        kws = THEMATIC_BLOCKS.get(block, {}).get("keywords", [])
+        hits = [k for k in kws if k in f"{skill_id} {desc} {' '.join(tags)}".lower()]
         return {
-            "score": min(7, 3 + len(hits)), # escala comprimida
-            "argument": f"Alta aderência ao bloco '{block}'. Oferece recursos reutilizáveis ({', '.join(hits[:3]) or 'específicos'})."
+            "score": min(7, 3 + len(hits)),
+            "argument": f"Aderência ao bloco '{block}'. ({', '.join(hits[:3]) or 'geral'})."
         }
 
     @staticmethod
     def critic_view(skill_id: str, desc: str, tags: list[str], block: str) -> dict:
-        """Mente 2: Crítico (Lado Ruim / Risco & Ruído)"""
         risks = []
         if len(desc) < 60:
-            risks.append("descrição concisa demais")
+            risks.append("descrição concisa")
         if "-" in skill_id and len(skill_id.split("-")) > 3:
             risks.append("alta especificidade")
         if not tags:
             risks.append("metadados limitados")
 
         return {
-            "score": min(7, 3 + len(risks)), # escala comprimida
-            "argument": f"Ponto de atenção: {', '.join(risks) if risks else 'Possível sobreposição de escopo com ferramentas genéricas'}."
+            "score": min(7, 3 + len(risks)),
+            "argument": f"Atenção: {', '.join(risks) if risks else 'Possível sobreposição de escopo'}."
         }
 
     @staticmethod
     def judge_verdict(advocate: dict, critic: dict, block: str) -> dict:
-        """Mente 3: Juiz (Decisão Final & Calibração)"""
         adv_score = advocate["score"]
         crit_score = critic["score"]
-        
-        # Ponderação comprimida (3 a 7)
         verdict_score = round((adv_score * 0.6) + ((10 - crit_score) * 0.4), 1)
-        approved = verdict_score >= 4.0
+        approved = verdict_score >= 4.0 and block != "general-tools"
 
         return {
             "assigned_block": block if approved else "general-tools",
@@ -101,10 +100,12 @@ class TriMindJudge:
 
 def classify_skill(skill_id: str, desc: str, tags: list[str]) -> dict:
     best_block = "general-tools"
-    best_score = -1
+    best_score = 0
 
     text = f"{skill_id} {desc} {' '.join(tags)}".lower()
     for block_name, cfg in THEMATIC_BLOCKS.items():
+        if not cfg["keywords"]:
+            continue
         score = sum(3 if k in skill_id.lower() else 1 for k in cfg["keywords"] if k in text)
         if score > best_score:
             best_score = score
@@ -154,12 +155,11 @@ def run_classification(apply_to_manifest: bool = False):
     if apply_to_manifest:
         with open(MANIFEST_PATH, "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2, ensure_ascii=False)
-        print(f"\n[OK] Manifesto atualizado com blocos temáticos e pareceres em: {MANIFEST_PATH.name}")
+        print(f"\n[OK] Manifesto atualizado em: {MANIFEST_PATH.name}")
 
 if __name__ == "__main__":
     apply_flag = "--apply" in sys.argv
     if len(sys.argv) > 1 and sys.argv[1] not in ("--apply",):
-        # Modo inspeção de uma skill específica
         target_id = sys.argv[1]
         with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
             manifest = {item["id"]: item for item in json.load(f)}

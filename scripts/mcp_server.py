@@ -6,6 +6,7 @@ import json
 import traceback
 import contextlib
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 # Suporte a UTF-8 no Windows
 if sys.platform == "win32":
@@ -190,7 +191,6 @@ TOOLS_DEFINITIONS = [
 ]
 
 def capture_execution(func, *args, **kwargs):
-    """Executa a função capturando saídas de stdout para não quebrar a comunicação JSON-RPC."""
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         ret = func(*args, **kwargs)
@@ -230,12 +230,20 @@ def handle_route_skills(arguments: dict) -> dict:
         block=block
     )
 
+    activated = res.get("activated", []) if res else []
+    summary_message = (
+        f"[AGY-SKILL-ROUTER] Ativação concluída para: '{task}'. "
+        f"Skills ativas em .agent/skills/: {', '.join(activated) if activated else 'Nenhuma (tarefa genérica)'}. "
+        f"Consulte o arquivo SKILL.md correspondente para aplicar as regras de engenharia."
+    )
+
     summary = {
-        "task": task,
-        "workspace": str(manage_skills.get_active_dir().parent),
+        "status": "success",
+        "message": summary_message,
         "bundle_matched": res.get("bundle") if res else None,
-        "activated_skills": res.get("activated", []) if res else [],
+        "activated_skills": activated,
         "pinned_skills": res.get("pinned", []) if res else [],
+        "workspace": str(manage_skills.get_active_dir().parent),
         "cli_output": stdout_text
     }
     return {
@@ -403,18 +411,21 @@ def main():
             method = request.get("method")
             params = request.get("params", {})
 
-            # 1. Initialize
+            # 1. Initialize com decodificação segura de URI
             if method == "initialize":
-                # Detecta workspace do cliente Antigravity / IDE
                 root_uri = params.get("rootUri") or ""
                 ws_folders = params.get("workspaceFolders") or []
                 if ws_folders and isinstance(ws_folders, list) and ws_folders[0].get("uri"):
                     root_uri = ws_folders[0]["uri"]
 
-                if root_uri.startswith("file:///"):
-                    manage_skills.set_workspace(root_uri.replace("file:///", ""))
-                elif root_uri.startswith("file://"):
-                    manage_skills.set_workspace(root_uri.replace("file://", ""))
+                if root_uri:
+                    parsed = urlparse(root_uri)
+                    clean_path = unquote(parsed.path)
+                    if sys.platform == "win32" and clean_path.startswith("/"):
+                        clean_path = clean_path[1:]
+                    target_path = Path(clean_path).resolve()
+                    if target_path.exists() and target_path.is_dir():
+                        manage_skills.set_workspace(target_path)
 
                 send_json({
                     "jsonrpc": "2.0",
@@ -428,17 +439,14 @@ def main():
                         "serverInfo": SERVER_INFO
                     }
                 })
-            # 2. Notification initialized
             elif method == "notifications/initialized":
                 pass
-            # 3. Ping
             elif method == "ping":
                 send_json({
                     "jsonrpc": "2.0",
                     "id": req_id,
                     "result": {}
                 })
-            # 4. List tools
             elif method == "tools/list":
                 send_json({
                     "jsonrpc": "2.0",
@@ -447,7 +455,6 @@ def main():
                         "tools": TOOLS_DEFINITIONS
                     }
                 })
-            # 5. List resources
             elif method == "resources/list":
                 active_skills = []
                 cur_active = manage_skills.get_active_dir()
@@ -458,7 +465,7 @@ def main():
                         "uri": f"skills://active/{s}",
                         "name": f"Active Skill: {s}",
                         "mimeType": "text/markdown",
-                        "description": f"Instruções completas do arquivo SKILL.md para {s}"
+                        "description": f"Instruções do arquivo SKILL.md para {s}"
                     }
                     for s in active_skills
                 ]
@@ -469,7 +476,6 @@ def main():
                         "resources": resources
                     }
                 })
-            # 6. Read resource
             elif method == "resources/read":
                 uri = params.get("uri", "")
                 content = ""
@@ -481,7 +487,7 @@ def main():
                     if md_path.exists():
                         content = md_path.read_text(encoding="utf-8", errors="ignore")
                     else:
-                        content = f"[!] Arquivo SKILL.md não encontrado para a skill ativa '{sid}' em {cur_active}."
+                        content = f"[!] Arquivo SKILL.md não encontrado para '{sid}' em {cur_active}."
                 elif uri.startswith("skills://vault/"):
                     sid = uri.replace("skills://vault/", "").strip("/")
                     md_path = manage_skills.VAULT_DIR / sid / "SKILL.md"
@@ -505,11 +511,9 @@ def main():
                         ]
                     }
                 })
-            # 7. Call tool
             elif method == "tools/call":
                 tool_name = params.get("name")
                 tool_args = params.get("arguments", {})
-
                 handler = TOOL_HANDLERS.get(tool_name)
                 if not handler:
                     send_json({
@@ -529,12 +533,12 @@ def main():
                         "id": req_id,
                         "result": tool_result
                     })
-                except ValueError as ve:
+                except (ValueError, FileNotFoundError) as ve:
                     send_json({
                         "jsonrpc": "2.0",
                         "id": req_id,
                         "result": {
-                            "content": [{"type": "text", "text": f"[ERRO DE VALIDAÇÃO] {str(ve)}"}],
+                            "content": [{"type": "text", "text": f"[ERRO] {str(ve)}"}],
                             "isError": True
                         }
                     })
