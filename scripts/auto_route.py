@@ -19,27 +19,43 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from manage_skills import add, reset, list_skills, get_manifest
 
-SYNONYMS = {
-    "pdf": ["pdf", "pdfs", "adobe", "ocr", "formulario", "formularios", "folha", "pagina"],
-    "xlsx": ["planilha", "planilhas", "excel", "tabela", "tabelas", "spreadsheet", "spreadsheets", "csv", "tsv", "colunas", "linhas", "formulas"],
-    "docx": ["word", "doc", "docx", "documento", "documentos", "texto", "redacao", "relatorio", "contrato", "oficio"],
-    "pptx": ["powerpoint", "apresentacao", "apresentacoes", "slides", "slide", "deck", "pitch"],
-    "frontend-design": ["frontend", "interface", "ui", "ux", "css", "html", "react", "tailwind", "layout", "visual", "responsivo", "estilo"],
-    "web-artifacts-builder": ["site", "aplicacao", "pagina", "webapp", "dashboard", "componente", "spa"],
-    "webapp-testing": ["teste", "testes", "testar", "cypress", "playwright", "selenium", "e2e", "qa", "automatizar", "verificar"],
-    "mcp-builder": ["mcp", "protocolo", "servidor", "conector", "integration", "tools"],
-    "canvas-design": ["poster", "banner", "cartaz", "arte", "ilustracao", "design", "grafico"],
-    "algorithmic-art": ["algoritmica", "p5js", "gerativa", "particulas", "fractal", "canvas"],
-    "slack-gif-creator": ["gif", "animacao", "slack", "sticker", "frame"],
-    "brand-guidelines": ["marca", "identidade", "branding", "paleta", "cores", "padrao"],
-    "doc-coauthoring": ["coautoria", "revisao", "editorial", "redigir", "co-autor"],
-    "internal-comms": ["comunicacao", "comunicado", "anuncio", "newsletter", "memorando"]
+# Frameworks irrelevantes para penalizar caso apareçam no ID sem terem sido pedidos
+UNRELATED_FRAMEWORKS = {
+    "angular", "vue", "svelte", "django", "laravel", "flutter",
+    "swift", "godot", "odoo", "wordpress", "drupal", "magento",
+    "spring", "ruby", "rails", "php", "csharp", "dotnet", "rust"
 }
 
 GENERIC_TERMS = {
     "python", "javascript", "typescript", "node", "code", "codigo",
     "script", "funcao", "function", "arquivo", "file", "criar",
-    "fazer", "gerar", "escreva", "build", "create", "make"
+    "fazer", "gerar", "escreva", "build", "create", "make", "task",
+    "ajustar", "modificar", "corrigir", "adicionar", "novo", "loop",
+    "loops", "logica", "explicar", "duvida", "ajuda", "array", "lista"
+}
+
+SYNONYMS = {
+    "supabase-postgres-best-practices": ["supabase", "postgres", "postgresql", "rls", "migration", "migrations", "tabela", "tabelas", "sql", "politicas"],
+    "supabase": ["supabase", "postgres", "postgresql", "rls", "migration", "migrations", "tabela", "tabelas", "sql"],
+    "supabase-automation": ["supabase", "migration", "banco", "database"],
+    "tailwind-design-system": ["tailwind", "tailwindcss", "css", "layout", "responsivo", "estilo", "tema"],
+    "tailwind-patterns": ["tailwind", "tailwindcss", "css", "layout", "estilo", "componentes"],
+    "tanstack-query-expert": ["tanstack", "react-query", "query", "cache", "fetch", "mutacao"],
+    "zod-validation-expert": ["zod", "validacao", "schema", "schemas", "dto"],
+    "vitest-skill": ["vitest", "teste", "testes", "testar", "unitario", "unitarios", "mock", "mocking"],
+    "webapp-testing": ["teste", "testes", "testar", "cypress", "playwright", "e2e", "qa", "automatizar", "verificar"],
+    "pdf": ["pdf", "pdfs", "adobe", "ocr", "formulario", "formularios", "folha", "pagina", "devis", "relatorio"],
+    "xlsx": ["planilha", "planilhas", "excel", "tabela", "tabelas", "spreadsheet", "spreadsheets", "csv", "tsv", "colunas", "linhas", "formulas", "ppa", "bpu", "openpyxl", "pandas"],
+    "docx": ["word", "doc", "docx", "documento", "documentos", "texto", "redacao", "relatorio", "contrato", "oficio"],
+    "pptx": ["powerpoint", "apresentacao", "apresentacoes", "slides", "slide", "deck", "pitch"],
+    "frontend-design": ["frontend", "interface", "ui", "ux", "react", "componente", "componentes", "layout", "visual", "tela"],
+    "web-artifacts-builder": ["site", "aplicacao", "pagina", "webapp", "dashboard", "componente", "spa"],
+    "mcp-builder": ["mcp", "protocolo", "servidor", "conector", "integration", "tools"],
+    "canvas-design": ["poster", "banner", "cartaz", "arte", "ilustracao", "design", "grafico"],
+    "slack-gif-creator": ["gif", "animacao", "slack", "sticker", "frame"],
+    "brand-guidelines": ["marca", "identidade", "branding", "paleta", "cores", "padrao"],
+    "doc-coauthoring": ["coautoria", "revisao", "editorial", "redigir", "co-autor"],
+    "internal-comms": ["comunicacao", "comunicado", "anuncio", "newsletter", "memorando"]
 }
 
 def normalize(text: str) -> str:
@@ -54,21 +70,29 @@ def score_skill(query: str, skill_id: str, skill_data: dict) -> float:
 
     score = 0.0
     norm_id = normalize(skill_id)
+    id_parts = set(norm_id.split("-"))
     norm_desc = normalize(skill_data.get("description", ""))
     norm_tags = [normalize(t) for t in skill_data.get("tags", [])]
 
-    # 1. Correspondência direta no ID da skill
+    # Penalidade para frameworks estranhos que não estão no prompt
+    for fw in UNRELATED_FRAMEWORKS:
+        if fw in id_parts and fw not in tokens:
+            return -100.0
+
+    # 1. Correspondência no ID
     for token in tokens:
         if token == norm_id:
-            score += 12.0
+            score += 15.0
+        elif token in id_parts and token not in GENERIC_TERMS:
+            score += 8.0
         elif token in norm_id and token not in GENERIC_TERMS:
-            score += 6.0
+            score += 2.0
 
-    # 2. Sinônimos conhecidos
+    # 2. Sinônimos e mapeamento de domínio
     syns = SYNONYMS.get(skill_id, [])
     for token in tokens:
         if token in syns:
-            score += 8.0
+            score += 7.0
 
     # 3. Correspondência em tags
     for token in tokens:
@@ -82,7 +106,7 @@ def score_skill(query: str, skill_id: str, skill_data: dict) -> float:
 
     return score
 
-def route(prompt: str, top_k: int = 2, threshold: float = 4.0):
+def route(prompt: str, top_k: int = 2, threshold: float = 5.0):
     manifest = get_manifest()
     scored = []
 

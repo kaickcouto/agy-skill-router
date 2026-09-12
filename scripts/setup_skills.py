@@ -141,7 +141,16 @@ def run():
                 valid = False
 
         if not valid:
-            shutil.move(str(item), str(QUARANTINE_DIR / item.name))
+            q_target = QUARANTINE_DIR / item.name
+            if q_target.exists():
+                if q_target.is_dir():
+                    shutil.rmtree(q_target, ignore_errors=True)
+                else:
+                    q_target.unlink(missing_ok=True)
+            try:
+                shutil.move(str(item), str(q_target))
+            except Exception:
+                pass
             descartadas += 1
             continue
 
