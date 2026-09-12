@@ -30,9 +30,11 @@ UNRELATED_FRAMEWORKS = set()
 GENERIC_TERMS = set()
 SYNONYMS = {}
 SKILL_BUNDLES = {}
+PRESETS = {}
+MODULE_HINTS = {}
 
 def load_rules():
-    global UNRELATED_FRAMEWORKS, GENERIC_TERMS, SYNONYMS, SKILL_BUNDLES
+    global UNRELATED_FRAMEWORKS, GENERIC_TERMS, SYNONYMS, SKILL_BUNDLES, PRESETS, MODULE_HINTS
     if RULES_PATH.exists():
         try:
             with open(RULES_PATH, "r", encoding="utf-8") as f:
@@ -41,6 +43,8 @@ def load_rules():
                 GENERIC_TERMS = set(data.get("generic_terms", []))
                 SYNONYMS = data.get("synonyms", {})
                 SKILL_BUNDLES = data.get("skill_bundles", {})
+                PRESETS = data.get("presets", {})
+                MODULE_HINTS = data.get("module_hints", {})
                 return
         except Exception:
             pass
@@ -210,8 +214,29 @@ def check_bundles(query: str) -> tuple[str, list[str]]:
             return b_id, b_meta["skills"]
     return None, []
 
+def check_module_hints(query: str) -> tuple[str, list[str]]:
+    """Identifica se a consulta menciona algum módulo específico do CMS/projeto."""
+    tokens = set(tokenize(query))
+    for mod_name, mod_data in MODULE_HINTS.items():
+        if mod_name in tokens:
+            return mod_data.get("service", mod_name), mod_data.get("skills", [])
+    return None, []
+
+def apply_preset(name: str) -> bool:
+    load_rules()
+    preset = PRESETS.get(name.lower())
+    if not preset:
+        print(f"[!] Preset '{name}' não encontrado. Disponíveis: {', '.join(PRESETS.keys())}")
+        return False
+    title = preset.get("title", name)
+    skills_to_pin = preset.get("pinned", [])
+    print(f"[*] Aplicando Preset: '{title}' ({preset.get('description', '')})")
+    pin(skills_to_pin)
+    return True
+
 def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = False, category: str = None, block: str = None):
-    # 1. Verifica se dispara um Bundle Coordenado
+    # 1. Verifica Módulo do Projeto (CMS Module Hints)
+    mod_service, mod_skills = check_module_hints(prompt)
     bundle_id, bundle_skills = check_bundles(prompt)
     pinned = get_pinned()
 
@@ -224,6 +249,11 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
     reset()
 
     activated = []
+    if mod_service:
+        print(f"[MÓDULO CMS] Serviço Detectado: '{mod_service}' -> {', '.join(mod_skills)}")
+        activated = add(mod_skills)
+        return {"module": mod_service, "activated": activated, "pinned": list(pinned)}
+
     if bundle_id:
         b_title = SKILL_BUNDLES[bundle_id]["title"]
         print(f"[BUNDLE] Combo Ativado: '{b_title}' -> {', '.join(bundle_skills)}")
@@ -317,6 +347,7 @@ if __name__ == "__main__":
         print("  python scripts/auto_route.py '<tarefa a executar>' [--explain] [--top-k N] [--block BLOCO] [--category CAT]")
         print("  python scripts/auto_route.py search '<termo>' [--block BLOCO] [--category CAT]")
         print("  python scripts/auto_route.py info <skill_id>")
+        print("  python scripts/auto_route.py preset <nome|list>")
         print("  python scripts/auto_route.py pin <id1> [id2...]")
         print("  python scripts/auto_route.py unpin <id1> [id2...]")
         print("  python scripts/auto_route.py status")
@@ -330,6 +361,18 @@ if __name__ == "__main__":
         status()
     elif cmd == "reset":
         reset()
+    elif cmd == "preset":
+        if len(args) > 1:
+            pname = args[1].lower()
+            if pname == "list":
+                load_rules()
+                print("[*] Presets disponíveis:")
+                for k, v in PRESETS.items():
+                    print(f"  • {k:12} - {v.get('title')} ({', '.join(v.get('pinned', []))})")
+            else:
+                apply_preset(pname)
+        else:
+            print("Uso: python scripts/auto_route.py preset <nome|list>")
     elif cmd == "info":
         sid = args[1] if len(args) > 1 else ""
         if sid:

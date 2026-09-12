@@ -164,6 +164,27 @@ TOOLS_DEFINITIONS = [
         "annotations": {
             "readOnlyHint": True
         }
+    },
+    {
+        "name": "apply_preset",
+        "description": "Aplica um perfil de skills pré-configurado no workspace (ex: 'cms', 'fullstack', 'qa'), fixando as skills essenciais para não serem desativadas em resets.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "preset_name": {
+                    "type": "string",
+                    "description": "Nome do preset (ex: 'cms', 'fullstack', 'qa')."
+                },
+                "workspace_dir": {
+                    "type": "string",
+                    "description": "Caminho opcional do projeto alvo."
+                }
+            },
+            "required": ["preset_name"]
+        },
+        "annotations": {
+            "idempotentHint": True
+        }
     }
 ]
 
@@ -308,6 +329,23 @@ def handle_skill_info(arguments: dict) -> dict:
         ]
     }
 
+def handle_apply_preset(arguments: dict) -> dict:
+    pname = arguments.get("preset_name", "").strip()
+    if not pname:
+        raise ValueError("preset_name é obrigatório")
+    ws = arguments.get("workspace_dir")
+    if ws:
+        manage_skills.set_workspace(ws)
+    stdout_text, ok = capture_execution(auto_route.apply_preset, pname)
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": stdout_text
+            }
+        ]
+    }
+
 TOOL_HANDLERS = {
     "route_skills": handle_route_skills,
     "list_skills": handle_list_skills,
@@ -316,6 +354,7 @@ TOOL_HANDLERS = {
     "pin_skill": handle_pin_skill,
     "unpin_skill": handle_unpin_skill,
     "skill_info": handle_skill_info,
+    "apply_preset": handle_apply_preset,
 }
 
 def send_json(data: dict):

@@ -67,5 +67,52 @@
       "min_matches": 2,
       "skills": ["webapp-testing", "vitest-skill"]
     }
+  },
+  "presets": {
+    "cms": {
+      "title": "Perfil Base CMS Modular",
+      "description": "Fixa o banco relacional Supabase e Tailwind UI para desenvolvimento estável de módulos.",
+      "pinned": ["supabase-postgres-best-practices", "tailwind-patterns"]
+    },
+    "fullstack": {
+      "title": "Perfil Fullstack Web",
+      "description": "Banco Postgres/Supabase, Tailwind UI e validações Zod.",
+      "pinned": ["supabase-postgres-best-practices", "tailwind-patterns", "zod-validation-expert"]
+    },
+    "qa": {
+      "title": "Perfil QA & Testes Contínuos",
+      "description": "Testes E2E com Playwright e testes unitários Vitest.",
+      "pinned": ["webapp-testing", "vitest-skill"]
+    }
+  },
+  "module_hints": {
+    "devis": {
+      "service": "Módulo de Orçamentos e Devis",
+      "skills": ["xlsx", "pdf"]
+    },
+    "ppa": {
+      "service": "Módulo de Planilhas PPA",
+      "skills": ["xlsx"]
+    },
+    "relatorios": {
+      "service": "Módulo de Relatórios e Exportação",
+      "skills": ["xlsx", "pdf"]
+    },
+    "faturamento": {
+      "service": "Módulo Financeiro e Cobrança",
+      "skills": ["supabase-postgres-best-practices", "zod-validation-expert"]
+    },
+    "billing": {
+      "service": "Módulo de Pagamentos / Billing",
+      "skills": ["supabase-postgres-best-practices", "zod-validation-expert"]
+    },
+    "auth": {
+      "service": "Módulo de Autenticação e Usuários",
+      "skills": ["supabase", "zod-validation-expert"]
+    },
+    "dashboard": {
+      "service": "Módulo de Dashboard e Gráficos",
+      "skills": ["frontend-design", "tailwind-patterns"]
+    }
   }
 }

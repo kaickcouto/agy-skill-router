@@ -155,6 +155,28 @@ def link_directory(src: Path, dst: Path):
         shutil.copy2(src, dst)
     return "copy"
 
+def find_skill_source(sid: str) -> tuple[Path | None, str]:
+    """Busca o diretório da skill: prioriza skills_custom locais, depois vault."""
+    active_dir = get_active_dir()
+    # 1. Checa se o projeto alvo tem skills_custom/
+    ws_custom = active_dir.parent.parent / "skills_custom" / sid
+    if ws_custom.exists():
+        return ws_custom.resolve(), "custom-workspace"
+
+    # 2. Checa skills_custom do router
+    router_custom = ROOT / "skills_custom" / sid
+    if router_custom.exists():
+        return router_custom.resolve(), "custom-router"
+
+    # 3. Vault padrão
+    manifest = get_manifest()
+    target_name = manifest.get(sid, {}).get("target", sid)
+    vault_src = ROOT / "skills_vault" / target_name
+    if vault_src.exists():
+        return vault_src.resolve(), "vault"
+
+    return None, "not-found"
+
 def add(ids: list[str]) -> list[str]:
     load_env()
     manifest = get_manifest()
@@ -163,13 +185,12 @@ def add(ids: list[str]) -> list[str]:
     activated = []
 
     for sid in ids:
-        if sid not in manifest:
-            print(f"[!] ID desconhecido no catálogo: '{sid}'")
+        src, origin = find_skill_source(sid)
+        if not src:
+            print(f"[!] ID não encontrado no catálogo nem em skills_custom/: '{sid}'")
             continue
 
-        meta = manifest[sid]
-        target_name = meta.get("target", sid)
-        src = (VAULT_DIR / target_name).resolve()
+        target_name = sid
         dst = active_dir / target_name
 
         if dst.exists() or dst.is_symlink():
@@ -177,17 +198,14 @@ def add(ids: list[str]) -> list[str]:
             activated.append(sid)
             continue
 
-        if not src.exists():
-            print(f"[!] Origem não encontrada no vault: {src}")
-            continue
-
+        meta = manifest.get(sid, {})
         missing = [v for v in meta.get("required_env", []) if not os.getenv(v)]
         if missing:
             print(f"[X] Bloqueada '{sid}': Faltam variáveis no .env -> {', '.join(missing)}")
             continue
 
         method = link_directory(src, dst)
-        print(f"[+] Ativada ({method}): {sid}")
+        print(f"[+] Ativada ({origin}, {method}): {sid}")
         activated.append(sid)
     return activated
 
