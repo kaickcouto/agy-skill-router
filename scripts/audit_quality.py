@@ -35,6 +35,19 @@ OFFICIAL_WHITELIST = {
     "web-artifacts-builder", "claude-api", "academy-guide"
 }
 
+BLOCKED_REGEX = [
+    r'(^|-)(marketing|copywriting|seo|affiliate|growth|funnel|dropship|influencer|viral|content-strategist|blogwriting)($|-)',
+    r'(^|-)(ad|ads|campaign|advertis)($|-)',
+    r'(^|-)(odoo|salesforce|sap|drupal|magento|wordpress|shopify|makepad|crossframe)($|-)',
+    r'(^|-)(crypto|solidity|web3|nft|token|blockchain|yield)($|-)',
+    r'(^|-)(health|diet|fitness|dating|travel|weightloss|recipe|tarot|astrology|psycholog)($|-)',
+    r'(^|-)(andruia|accint|xiaohongshu|wechat|douyin|taisly)($|-)',
+    r'azure-.*-(java|dotnet|csharp)',
+    r'-(java|dotnet|csharp)$'
+]
+
+COMPILED_BLOCKED = [re.compile(p, re.IGNORECASE) for p in BLOCKED_REGEX]
+
 def calculate_quality_score(skill_dir: Path) -> tuple[int, list[str]]:
     if skill_dir.name in OFFICIAL_WHITELIST:
         return 95, ["Skill oficial auditada"]
@@ -53,30 +66,41 @@ def calculate_quality_score(skill_dir: Path) -> tuple[int, list[str]]:
     size = len(text)
     text_lower = text.lower()
 
+    # Inspeciona pasta references se existir
+    ref_dir = skill_dir / "references"
+    ref_files = list(ref_dir.glob("*.md")) if ref_dir.exists() else []
+    total_ref_size = sum(len(rf.read_text(encoding="utf-8", errors="ignore")) for rf in ref_files[:10])
+    effective_size = size + total_ref_size
+
     # 1. Profundidade de conteúdo (max 30 pts)
-    if size > 4000:
+    if effective_size > 4000:
         score += 30
-    elif size > 1800:
+    elif effective_size > 1800:
         score += 20
-    elif size > 600:
+    elif effective_size > 600:
         score += 10
     else:
         reasons.append("Tamanho insuficiente (< 600 bytes)")
 
     # 2. Praticidade e exemplos de código ou regras (max 35 pts)
     code_blocks = len(re.findall(r'```[a-zA-Z0-9_\-]+', text))
+    for rf in ref_files[:5]:
+        r_text = rf.read_text(encoding="utf-8", errors="ignore")
+        code_blocks += len(re.findall(r'```[a-zA-Z0-9_\-]+', r_text))
+
     if code_blocks >= 3:
         score += 25
     elif code_blocks >= 1:
         score += 15
-    elif size > 3000:
-        # Guia conceitual/arquitetural detalhado
+    elif effective_size > 3000:
         score += 15
     else:
         reasons.append("Sem exemplos práticos de código")
 
     has_scripts = (skill_dir / "scripts").exists() or any(skill_dir.glob("*.py")) or any(skill_dir.glob("*.sh"))
     if has_scripts:
+        score += 10
+    if len(ref_files) >= 2:
         score += 10
 
     # 3. Estrutura e organização (max 25 pts)
@@ -90,7 +114,6 @@ def calculate_quality_score(skill_dir: Path) -> tuple[int, list[str]]:
     if has_frontmatter:
         score += 10
 
-    # Checklist / Tabelas de apoio
     if "|" in text and "-|-" in text:
         score += 5
 
@@ -98,79 +121,106 @@ def calculate_quality_score(skill_dir: Path) -> tuple[int, list[str]]:
     for phrase in GENERIC_TEMPLATE_PHRASES:
         if phrase in text_lower:
             score -= 35
-            reasons.append(f"Template genérico não customizado")
+            reasons.append("Template genérico não customizado")
             break
 
-    # Persona pura sem código e sem scripts
-    if "persona" in text_lower and code_blocks == 0 and not has_scripts and size < 2500:
+    if "persona" in text_lower and code_blocks == 0 and not has_scripts and effective_size < 2500:
         score -= 30
         reasons.append("Persona/Roleplay sem ferramentas técnicas")
 
-    # Título ou descrição vazia/inútil
-    if size < 300:
+    if effective_size < 300:
         score -= 25
         reasons.append("Conteúdo extremamente raso")
 
     final_score = max(0, min(100, score))
     return final_score, reasons
 
-def run_audit(dry_run: bool = True, min_score: int = 40):
-    print(f"[*] Iniciando Auditoria Justa de Qualidade (Corte Mínimo: {min_score} pts)...")
-    print(f"[*] Modo: {'SIMULAÇÃO (Nenhum arquivo será movido)' if dry_run else 'APLICAR PENEIRA (Movendo lixo para quarentena)'}")
+def is_domain_blocked(skill_name: str) -> tuple[bool, str]:
+    if skill_name in OFFICIAL_WHITELIST:
+        return False, ""
+    for rgx in COMPILED_BLOCKED:
+        if rgx.search(skill_name):
+            return True, f"Domínio descartado ({rgx.pattern})"
+    return False, ""
 
-    skills = sorted([d for d in VAULT_DIR.iterdir() if d.is_dir() and not d.name.startswith((".", "_"))])
-    
-    tier_gold = []
-    tier_silver = []
-    quarantined = []
+def run_audit(dry_run: bool = True, min_score: int = 60, engineering_only: bool = True):
+    print(f"[*] Iniciando Auditoria Bidirecional (Vault & Quarentena)...")
+    print(f"[*] Filtro de Engenharia: {'ATIVO (foco em desenvolvimento e dados)' if engineering_only else 'DESATIVADO'}")
+    print(f"[*] Corte Mínimo: {min_score} pts")
 
-    for s in skills:
-        score, reasons = calculate_quality_score(s)
-        if score >= 65:
-            tier_gold.append((score, s))
-        elif score >= min_score:
-            tier_silver.append((score, s))
+    # Coleta todas as skills de ambos os diretórios
+    all_skills = {}
+    if VAULT_DIR.exists():
+        for d in VAULT_DIR.iterdir():
+            if d.is_dir() and not d.name.startswith((".", "_")):
+                all_skills[d.name] = (d, "vault")
+    if QUARANTINE_DIR.exists():
+        for d in QUARANTINE_DIR.iterdir():
+            if d.is_dir() and not d.name.startswith((".", "_")):
+                all_skills[d.name] = (d, "quarantine")
+
+    to_vault = []
+    to_quarantine = []
+
+    for name, (path, current_loc) in sorted(all_skills.items()):
+        name_lower = name.lower()
+
+        if engineering_only:
+            blocked, b_reason = is_domain_blocked(name_lower)
+            if blocked:
+                to_quarantine.append((0, path, [b_reason], current_loc))
+                continue
+
+        score, reasons = calculate_quality_score(path)
+        if score >= min_score or name_lower in OFFICIAL_WHITELIST:
+            to_vault.append((score, path, current_loc))
         else:
-            quarantined.append((score, s, reasons))
+            to_quarantine.append((score, path, reasons, current_loc))
 
-    print("\n" + "="*50)
-    print(f"[*] Total de Skills Analisadas: {len(skills)}")
-    print(f"  [+] Tier Ouro (Excelente >= 65 pts): {len(tier_gold)}")
-    print(f"  [+] Tier Prata (Sólido {min_score}-64 pts):  {len(tier_silver)}")
-    print(f"  [-] Tier Baixo / Peneiradas (< {min_score} pts): {len(quarantined)}")
-    print("="*50)
-
-    if quarantined:
-        print("\n[*] Amostra de Skills Reprovadas na Peneira:")
-        for sc, path, reasons in quarantined[:12]:
-            r_str = "; ".join(reasons) if reasons else "Score baixo geral"
-            print(f"  - [{sc:2d} pts] {path.name:32} -> {r_str}")
+    print("\n" + "="*55)
+    print(f"[*] Total de Skills Avaliadas: {len(all_skills)}")
+    print(f"  [+] Aprovadas para o Vault:    {len(to_vault)}")
+    print(f"  [-] Mantidas na Quarentena:   {len(to_quarantine)}")
+    print("="*55)
 
     if not dry_run:
+        VAULT_DIR.mkdir(parents=True, exist_ok=True)
         QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
-        moved = 0
-        for _, path, _ in quarantined:
-            dst = QUARANTINE_DIR / path.name
-            if dst.exists():
-                if dst.is_dir():
+
+        restored = 0
+        quarantined = 0
+
+        # Move aprovadas da quarentena de volta para o vault se necessário
+        for sc, path, loc in to_vault:
+            if loc == "quarantine":
+                dst = VAULT_DIR / path.name
+                if dst.exists():
                     shutil.rmtree(dst, ignore_errors=True)
-                else:
-                    dst.unlink(missing_ok=True)
-            try:
                 shutil.move(str(path), str(dst))
-                moved += 1
-            except Exception:
-                pass
-        print(f"\n[OK] Peneira concluída! {moved} skills foram movidas para skills_quarantine/.")
+                restored += 1
+
+        # Move reprovadas do vault para quarentena
+        for sc, path, reasons, loc in to_quarantine:
+            if loc == "vault":
+                dst = QUARANTINE_DIR / path.name
+                if dst.exists():
+                    shutil.rmtree(dst, ignore_errors=True)
+                shutil.move(str(path), str(dst))
+                quarantined += 1
+
+        print(f"\n[OK] Ajuste bidirecional aplicado:")
+        print(f"    - Restauradas para o Vault: {restored}")
+        print(f"    - Enviadas para Quarentena: {quarantined}")
         print("[*] Reexecutando scripts/setup_skills.py para atualizar o manifesto...")
         import setup_skills
         setup_skills.run()
 
 if __name__ == "__main__":
     apply_changes = "--apply" in sys.argv
-    min_score = 40
+    eng_only = "--all" not in sys.argv
+    min_score = 60
     for arg in sys.argv:
         if arg.startswith("--min-score="):
             min_score = int(arg.split("=")[1])
 
-    run_audit(dry_run=not apply_changes, min_score=min_score)
+    run_audit(dry_run=not apply_changes, min_score=min_score, engineering_only=eng_only)
