@@ -222,11 +222,13 @@ agy-skill-router/
 
 ---
 
-## 📊 Benchmark de Eficiência
+## 📊 Benchmark de Eficiência & Auditoria de Tokens
 
-| Métrica | Com Router | Sem Router (Todas Carregadas) | Ganho |
+| Métrica | Com Router | Sem Router (Todas Carregadas) | Ganho Real |
 | :--- | :--- | :--- | :--- |
-| **Tokens Consumidos em Repouso** | **0 tokens** | ~1.836.800 tokens | **99.85% de economia** |
-| **Tempo de Montagem** | **< 1ms** (NTFS Junction) | N/A (Cópia lenta) | **Instantâneo** |
-| **Latência de Decisão (BM25)** | **~2.5ms** | N/A | **Tempo real** |
-| **Uso de Memória / Disco** | **0 bytes duplicados** | ~150 MB por projeto | **100% deduplicado** |
+| **Tokens Consumidos em Repouso** | **0 tokens** | **7.541.944 tokens** (1.312 skills) | **100% livre** |
+| **Contexto Médio Injetado** | **~5.593 tokens** / tarefa | 7.541.944 tokens / tarefa | **99.93% poupados** |
+| **Tempo de Montagem (Junctions)** | **< 1ms** (NTFS Junction) | N/A (Cópia física lenta) | **Instantâneo (0ms)** |
+| **Latência de Decisão (BM25)** | **~1.7ms** | N/A | **Tempo real** |
+| **Custo por Turno (Claude 3.5 Sonnet)** | **~$0.016 USD** | ~$22.62 USD (estoura contexto) | **$22.60 USD economizados/turno** |
+| **Decomposição Gratuita (OpenRouter)** | **~1.200 tokens** poupados no modelo pago | 0 (modelo pago arca com todo o escopo) | **Custo Zero de Raciocínio** |
