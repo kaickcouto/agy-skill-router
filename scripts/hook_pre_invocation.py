@@ -20,6 +20,25 @@ ROOT = SCRIPT_DIR.parent
 STATE_FILE = ROOT / ".agent" / ".pre_agent_last_step"
 sys.path.insert(0, str(SCRIPT_DIR))
 
+ACTION_TRIGGERS = {
+    "crie", "criar", "faca", "fazer", "adicione", "adicionar", "refatore", "refatorar",
+    "altere", "alterar", "corrija", "corrigir", "implemente", "implementar", "teste", "testar",
+    "migration", "endpoint", "rota", "tela", "bug", "erro", "componente", "setup",
+    "deploy", "docker", "banco", "tabela", "schema", "api", "query", "interface",
+    "script", "hook", "mcp", "view", "controller", "service"
+}
+
+def should_trigger_pre_agent(prompt: str) -> bool:
+    """Evita congelar o chat ou gastar cotas em conversas casuais e triviais."""
+    clean = prompt.lower().strip()
+    if len(clean) < 18:
+        return False
+    # Pula perguntas conceituais simples
+    if clean.startswith(("o que e", "o que é", "como funciona", "qual a diferenca", "qual a diferença", "explique", "me diga")):
+        return False
+    # Aciona se contiver termo de ação técnica
+    return any(term in clean for term in ACTION_TRIGGERS)
+
 def get_unprocessed_user_request(transcript_path: str) -> tuple[int, str]:
     if not transcript_path or not Path(transcript_path).exists():
         return -1, ""
@@ -51,8 +70,8 @@ def main():
     transcript_path = payload.get("transcriptPath")
     step_idx, user_prompt = get_unprocessed_user_request(transcript_path)
 
-    # Ignora prompts triviais, vazios ou muito curtos
-    if step_idx < 0 or not user_prompt or len(user_prompt) < 15:
+    # Gating: ignora se for prompt trivial, casual ou não-técnico
+    if step_idx < 0 or not should_trigger_pre_agent(user_prompt):
         sys.stdout.write("{}\n")
         return
 
@@ -73,7 +92,7 @@ def main():
     except Exception:
         pass
 
-    # Executa a decomposição técnica silenciando stdout intermediário
+    # Executa a decomposição técnica silenciando logs intermediários no stdout
     buf = io.StringIO()
     try:
         with contextlib.redirect_stdout(buf):

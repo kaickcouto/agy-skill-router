@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 import re
 import json
@@ -19,6 +19,8 @@ if sys.platform == "win32":
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parent
 CACHE_DIR = ROOT / ".agent"
+COOLDOWN_FILE = CACHE_DIR / ".openrouter_cooldown"
+COOLDOWN_SECONDS = 120
 
 # Carrega .env
 ENV_PATH = ROOT / ".env"
@@ -31,7 +33,7 @@ if ENV_PATH.exists():
 
 API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
-# Tiers ordenados por velocidade real testada (< 1.5s) e suporte multimodal
+# Tiers ordenados por velocidade real testada e suporte multimodal
 TIER_1_FAST = [
     "inclusionai/ling-3.0-flash-vl:free",  # Multimodal (Visão + Texto) ~1.3s
     "nex-agi/nex-n2.5-mini:free",          # Ultra-rápido ~0.9s
@@ -45,24 +47,43 @@ TIER_2_FALLBACK = [
 ]
 
 SYSTEM_PROMPT = """Você é um pré-agente compilador de requisitos técnicos de software.
-Sua missão é decompor o pedido bruto do usuário em uma especificação técnica cirúrgica para o agente programador executar sem desperdiçar tokens com dúvidas.
-Se houver print/imagem, extraia os componentes de tela e fluxos visuais.
+Sua missão é transformar a solicitação bruta do usuário em uma especificação técnica cirúrgica para o agente programador.
+Se houver prints de tela, extraia os componentes de interface e fluxos visuais.
 Responda SEM saudações e SEM introduções no formato estrito:
 
 ## [ESCOPO CIRÚRGICO]
 - Arquivos/módulos exatos a criar ou modificar.
 
 ## [STACK & KEYWORDS]
-- Tecnologias e termos-chave separados por vírgula (ex: supabase, postgres, react, tailwind, jwt, zod, test).
+- Tecnologias e termos-chave separados por vírgula (ex: supabase, postgres, react, tailwind, jwt, zod).
 
 ## [CONTRATO & VALIDAÇÕES]
-- Entradas, retornos esperados, tratamento de erros e regras de negócio.
+- Entradas, retornos esperados, tratamento de erros e regras essenciais.
 
 ## [CHECKLIST DE IMPLEMENTAÇÃO]
 1. Passo 1
 2. Passo 2
 3. Passo 3
 """
+
+def is_in_cooldown() -> bool:
+    """Verifica se o OpenRouter está em período de espera após erro 429."""
+    if COOLDOWN_FILE.exists():
+        try:
+            ts = float(COOLDOWN_FILE.read_text(encoding="utf-8").strip())
+            if time.time() - ts < COOLDOWN_SECONDS:
+                return True
+        except Exception:
+            pass
+    return False
+
+def trigger_cooldown():
+    """Ativa o Circuit Breaker por 2 minutos evitando travamento em loop no chat."""
+    try:
+        COOLDOWN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        COOLDOWN_FILE.write_text(str(time.time()), encoding="utf-8")
+    except Exception:
+        pass
 
 def encode_image(image_path: str) -> str:
     p = Path(image_path)
@@ -73,7 +94,45 @@ def encode_image(image_path: str) -> str:
         b64 = base64.b64encode(f.read()).decode("utf-8")
     return f"data:image/{ext};base64,{b64}"
 
-def call_openrouter(prompt: str, image_path: str = None, system_prompt: str = None, max_tokens: int = 800) -> dict:
+def extract_spec_data(raw_text: str, default_prompt: str) -> tuple[str, list[str]]:
+    """Extrai especificação e palavras-chave suportando JSON ou Markdown estruturado."""
+    text = raw_text.strip()
+    
+    # 1. Tenta extrair de JSON
+    match_json = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    json_candidate = match_json.group(1) if match_json else text
+    try:
+        data = json.loads(json_candidate)
+        if isinstance(data, dict) and ("keywords" in data or "scope" in data):
+            keywords = [str(k).strip().lower() for k in data.get("keywords", []) if str(k).strip()]
+            scope_lines = "\n".join(f"- {s}" for s in data.get("scope", []))
+            checklist_lines = "\n".join(
+                f"{idx}. {item}" if not re.match(r"^\d+\.", item) else item
+                for idx, item in enumerate(data.get("checklist", []), 1)
+            )
+            spec = f"""## [ESCOPO CIRÚRGICO]\n{scope_lines or '- ' + default_prompt}\n\n## [CONTRATO & VALIDAÇÕES]\n{data.get('contract', 'Padrões do projeto.')}\n\n## [CHECKLIST DE IMPLEMENTAÇÃO]\n{checklist_lines or '1. Implementar demanda'}"""
+            return spec, keywords
+    except Exception:
+        pass
+
+    # 2. Extrai de Markdown com blocos bem definidos
+    keywords = []
+    kw_match = re.search(r"##\s*\[STACK & KEYWORDS\](.*?)(##|\Z)", text, re.DOTALL | re.IGNORECASE)
+    if kw_match:
+        kw_text = kw_match.group(1).strip()
+        keywords = [k.strip().lower() for k in re.split(r"[,;\n\-•]+", kw_text) if len(k.strip()) > 1]
+
+    # Limpa markdown puro
+    if "## [ESCOPO" in text:
+        return text, keywords
+
+    # Fallback básico
+    return text, keywords
+
+def call_openrouter(prompt: str, image_path: str = None, system_prompt: str = None, max_tokens: int = 1000) -> dict:
+    if is_in_cooldown():
+        raise RuntimeError("OpenRouter em cooldown (rate limit 429 ativo). Bypass instantâneo para motor local.")
+
     if not API_KEY:
         raise ValueError("OPENROUTER_API_KEY não configurada no .env.")
 
@@ -111,64 +170,63 @@ def call_openrouter(prompt: str, image_path: str = None, system_prompt: str = No
             }
         )
         try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=12) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 model_used = data.get("model", tier[0])
                 msg = data["choices"][0]["message"]
                 raw_text = msg.get("content") or msg.get("reasoning") or ""
 
-                # Extrai palavras-chave do bloco STACK & KEYWORDS
-                keywords = []
-                match = re.search(r"##\s*\[STACK & KEYWORDS\](.*?)(##|\Z)", raw_text, re.DOTALL | re.IGNORECASE)
-                if match:
-                    kw_text = match.group(1).strip()
-                    keywords = [k.strip() for k in re.split(r"[,;\n\-•]+", kw_text) if k.strip() and len(k.strip()) > 1]
-
+                spec, keywords = extract_spec_data(raw_text, prompt)
                 return {
                     "model_used": model_used,
-                    "spec": raw_text.strip(),
+                    "spec": spec,
                     "keywords": keywords
                 }
         except Exception as e:
+            err_msg = str(e)
+            if "429" in err_msg or "rate limit" in err_msg.lower():
+                trigger_cooldown()
             last_error = e
             continue
 
     raise RuntimeError(f"Todos os tiers falharam: {last_error}")
 
 def expand_query(query: str) -> list[str]:
-    """Extrai termos técnicos e conceitos de demandas vagas ou informais usando IA gratuita."""
-    prompt = f"Gere de 4 a 6 termos técnicos, ferramentas e bibliotecas específicas para atender a seguinte necessidade de desenvolvimento: '{query}'. Responda estritamente apenas os termos técnicos separados por vírgula."
+    """Extrai termos técnicos e conceitos de demandas vagas usando IA gratuita."""
+    if is_in_cooldown():
+        return []
+
+    prompt = f"Gere de 4 a 6 termos técnicos para a demanda: '{query}'. Responda estritamente apenas palavras separadas por vírgula."
     try:
         data = call_openrouter(
             prompt,
             system_prompt="Você é um extrator de termos técnicos de software. Responda apenas termos técnicos separados por vírgula sem explicações.",
-            max_tokens=250
+            max_tokens=150
         )
         raw = data.get("spec", "")
         terms = [t.strip().lower() for t in re.split(r'[,;\n\-•]+', raw) if len(t.strip()) > 1]
         clean_terms = []
         for t in terms:
             t_sub = re.sub(r'[^a-zA-Z0-9_\- ]', '', t).strip()
-            if t_sub and len(t_sub) >= 3 and not any(w in t_sub for w in ["termo", "exemplo", "aqui", "resposta", "analis"]):
+            if t_sub and len(t_sub) >= 3 and not any(w in t_sub for w in ["termo", "exemplo", "aqui", "resposta"]):
                 clean_terms.append(t_sub)
         return clean_terms[:6]
     except Exception:
         return []
 
 def pre_agent_decompose(task: str, image_path: str = None, auto_route_skills: bool = False, top_k: int = 3) -> dict:
-    """Executa a decomposição via OpenRouter e correlaciona com o catálogo de skills do AGY."""
+    """Executa a decomposição técnica e correlação com o catálogo de skills do AGY."""
     sys.path.insert(0, str(SCRIPT_DIR))
     import auto_route
     import manage_skills
 
-    # 1. Decomposição com IA gratuita
+    # 1. Decomposição com IA gratuita (ou fallback local se em cooldown)
     try:
         res = call_openrouter(task, image_path)
     except Exception as e:
-        # Fallback offline gracioso se não houver internet ou cota
         res = {
-            "model_used": "offline-heuristic",
-            "spec": f"## [AVISO]\nFalha no OpenRouter ({e}). Decomposição via heurística local.\n\n## [CHECKLIST]\n1. Executar tarefa: '{task}'",
+            "model_used": "offline-local",
+            "spec": f"## [AVISO]\nBypass do OpenRouter ({e}). Decomposição via motor local.\n\n## [CHECKLIST]\n1. Executar demanda: '{task}'",
             "keywords": auto_route.tokenize(task)
         }
 
