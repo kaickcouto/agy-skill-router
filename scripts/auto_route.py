@@ -280,7 +280,13 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
         # Impede falsos positivos: rejeita se todos os matches forem termos genéricos/stopwords
         return any(m not in GENERIC_TERMS for m in matches)
 
-    selected_results = [r for r in results if is_valid_selection(r)][:top_k]
+    already_pinned = set(pinned)
+    # Prioriza skills novas que ainda não estão fixadas/ativas, garantindo vagas do top_k para novas habilidades
+    fresh_results = [r for r in results if is_valid_selection(r) and r[1] not in already_pinned]
+    if fresh_results:
+        selected_results = fresh_results[:top_k]
+    else:
+        selected_results = [r for r in results if is_valid_selection(r)][:top_k]
     selected_ids = [r[1] for r in selected_results]
 
     if selected_ids:
@@ -298,15 +304,13 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
             if exp_terms:
                 exp_query = f"{prompt} {' '.join(exp_terms)}"
                 exp_results = index.score(exp_query, category_filter=category, block_filter=block)
-                exp_results.sort(key=disambiguation_key, reverse=True)
-                exp_selected = [r for r in exp_results if r[0] >= threshold][:top_k]
-                if exp_selected:
-                    selected_results = exp_selected
-                    selected_ids = [r[1] for r in exp_selected]
+                fresh_exp = [r for r in exp_results if is_valid_selection(r) and r[1] not in already_pinned]
+                selected_results = (fresh_exp if fresh_exp else [r for r in exp_results if is_valid_selection(r)])[:top_k]
+                selected_ids = [r[1] for r in selected_results]
+                if selected_ids:
                     confidence = selected_results[0][0]
                     status = "semantic_routed"
-                    print(f"[*] [SUCESSO SEMÂNTICO] Termos descobertos: {', '.join(exp_terms[:4])}")
-                    print(f"[*] Roteando automaticamente para: {', '.join(selected_ids)} (Confiança: {confidence:.2f} >= {threshold})")
+                    print(f"[*] Roteamento semântico resgatado para: {', '.join(selected_ids)} (Confiança: {confidence:.2f})")
                     activated = add(selected_ids)
         except Exception:
             pass
@@ -326,7 +330,12 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
         for score, sid, matches in results[:5]:
             meta = index.manifest.get(sid, {})
             cat = meta.get("thematic_block", meta.get("category", "tools"))
-            status_str = "[SELECIONADA]" if sid in selected_ids else "[DESCARTADA]"
+            if sid in selected_ids:
+                status_str = "[SELECIONADA]"
+            elif sid in already_pinned:
+                status_str = "[JÁ FIXADA]  "
+            else:
+                status_str = "[DESCARTADA] "
             print(f"  {status_str} Score: {score:5.2f} | ID: {sid:30} | Bloco: {cat:15} | Matches: {', '.join(matches)}")
 
     return {

@@ -168,19 +168,39 @@ def remove_item(path: Path):
 
     path_str = str(path.absolute())
 
-    # No Windows, a API segura para remover junções de diretório sem afetar o alvo é RemoveDirectory (os.rmdir)
+    # 1. No Windows, tenta remover diretamente via os.rmdir
     if sys.platform == "win32" and is_junction_or_link(path):
         try:
             os.rmdir(path_str)
-            return
+            if not path.exists():
+                return
         except OSError:
             pass
 
+    # 2. os.unlink para symlinks padrão
     try:
         os.unlink(path_str)
-        return
+        if not path.exists():
+            return
     except OSError:
         pass
+
+    # 3. Solução infalível para Windows/OneDrive: remove a balise reparse via fsutil e remove o diretório vazio
+    if sys.platform == "win32" and is_junction_or_link(path):
+        try:
+            import subprocess
+            subprocess.run(["fsutil", "reparsepoint", "delete", path_str], capture_output=True, timeout=5)
+            try:
+                os.rmdir(path_str)
+                if not path.exists():
+                    return
+            except OSError:
+                pass
+            subprocess.run(["powershell", "-NoProfile", "-Command", f"Remove-Item -LiteralPath '{path_str}' -Force -Recurse"], capture_output=True, timeout=5)
+            if not path.exists():
+                return
+        except Exception:
+            pass
 
     try:
         if is_junction_or_link(path):

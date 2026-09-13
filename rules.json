@@ -37,6 +37,10 @@
     "pptx": ["powerpoint", "apresentacao", "apresentacoes", "slides", "slide", "deck", "pitch"],
     "frontend-design": ["frontend", "interface", "ui", "ux", "react", "componente", "componentes", "layout", "visual", "tela"],
     "web-artifacts-builder": ["site", "aplicacao", "pagina", "webapp", "dashboard", "componente", "spa"],
+    "python-fastapi-development": ["fastapi", "endpoint", "endpoints", "rota", "rotas", "pydantic", "backend", "api", "sqlalchemy"],
+    "fastapi-router-py": ["fastapi", "router", "routers", "endpoint", "rota"],
+    "api-designer": ["api", "apis", "endpoint", "endpoints", "rest", "restful", "contrato"],
+    "react-component-performance": ["react", "performance", "render", "re-render", "memo", "otimizar"],
     "mcp-builder": ["mcp", "protocolo", "servidor", "conector", "integration", "tools"],
     "canvas-design": ["poster", "banner", "cartaz", "arte", "ilustracao", "design", "grafico"],
     "slack-gif-creator": ["gif", "animacao", "slack", "sticker", "frame"],
@@ -45,6 +49,12 @@
     "internal-comms": ["comunicacao", "comunicado", "anuncio", "newsletter", "memorando"]
   },
   "skill_bundles": {
+    "backend-fastapi-api": {
+      "title": "Backend FastAPI & REST APIs",
+      "triggers": ["fastapi", "endpoint", "endpoints", "rota", "backend", "api", "pydantic"],
+      "min_matches": 2,
+      "skills": ["python-fastapi-development", "api-designer"]
+    },
     "fullstack-supabase": {
       "title": "Fullstack Supabase & React",
       "triggers": ["crud", "supabase", "fullstack", "autenticacao", "dashboard", "bpu", "banco"],
