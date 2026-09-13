@@ -162,55 +162,63 @@ def remove_item(path: Path):
     session = load_session_state()
     is_managed_by_router = path.name in session
 
-    if path.is_dir() and not is_junction_or_link(path) and not is_managed_by_router:
-        print(f"[PRESERVADA] Skill física nativa mantida intocada: {path.name}")
+def remove_item(path: Path):
+    remove_items_batch([path])
+
+def remove_items_batch(paths: list[Path]):
+    if not paths:
         return
+    session = load_session_state()
+    targets_to_clean = []
 
-    path_str = str(path.absolute())
+    for path in paths:
+        is_managed = path.name in session
+        if path.is_dir() and not is_junction_or_link(path) and not is_managed:
+            continue
+        targets_to_clean.append(path)
 
-    # 1. No Windows, tenta remover diretamente via os.rmdir
-    if sys.platform == "win32" and is_junction_or_link(path):
-        try:
-            os.rmdir(path_str)
-            if not path.exists():
-                return
-        except OSError:
-            pass
-
-    # 2. os.unlink para symlinks padrão
-    try:
-        os.unlink(path_str)
-        if not path.exists():
-            return
-    except OSError:
-        pass
-
-    # 3. Solução infalível para Windows/OneDrive: remove a balise reparse via fsutil e remove o diretório vazio
-    if sys.platform == "win32" and is_junction_or_link(path):
-        try:
-            import subprocess
-            subprocess.run(["fsutil", "reparsepoint", "delete", path_str], capture_output=True, timeout=5)
+    remaining_junctions = []
+    for path in targets_to_clean:
+        path_str = str(path.absolute())
+        # 1. Tentativa Win32 nativa ultra-rápida (0ms)
+        if sys.platform == "win32" and is_junction_or_link(path):
             try:
                 os.rmdir(path_str)
                 if not path.exists():
-                    return
+                    continue
             except OSError:
                 pass
-            subprocess.run(["powershell", "-NoProfile", "-Command", f"Remove-Item -LiteralPath '{path_str}' -Force -Recurse"], capture_output=True, timeout=5)
+
+        try:
+            os.unlink(path_str)
             if not path.exists():
-                return
-        except Exception:
+                continue
+        except OSError:
             pass
 
-    try:
-        if is_junction_or_link(path):
-            os.rmdir(path_str)
-        elif path.is_dir():
-            shutil.rmtree(path_str, ignore_errors=True)
-        elif path.is_file():
-            path.unlink(missing_ok=True)
-    except Exception:
-        pass
+        if sys.platform == "win32" and is_junction_or_link(path):
+            remaining_junctions.append(path_str)
+        else:
+            try:
+                if path.is_dir():
+                    shutil.rmtree(path_str, ignore_errors=True)
+                elif path.is_file():
+                    path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    # 2. Se alguma junção falhar (comum no OneDrive por ACL lock), limpa todas em um ÚNICO subprocesso batch (<200ms)
+    if remaining_junctions and sys.platform == "win32":
+        try:
+            import subprocess
+            commands = []
+            for r in remaining_junctions:
+                commands.append(f"fsutil reparsepoint delete '{r}'")
+                commands.append(f"Remove-Item -LiteralPath '{r}' -Force -Recurse -ErrorAction SilentlyContinue")
+            batch_cmd = " ; ".join(commands)
+            subprocess.run(["powershell", "-NoProfile", "-Command", f"& {{ {batch_cmd} }}"], capture_output=True, timeout=10)
+        except Exception:
+            pass
 
 def link_directory(src: Path, dst: Path) -> str:
     try:
@@ -320,6 +328,7 @@ def reset(force: bool = False):
     preserved_native = []
 
     if active_dir.exists():
+        items_to_delete = []
         for item in list(active_dir.iterdir()):
             if item.name == ".gitkeep" or item.name in pinned_targets:
                 continue
@@ -327,9 +336,10 @@ def reset(force: bool = False):
             if item.is_dir() and not is_junction_or_link(item) and not is_managed:
                 preserved_native.append(item.name)
                 continue
-            remove_item(item)
+            items_to_delete.append(item)
             session.pop(item.name, None)
             removed_count += 1
+        remove_items_batch(items_to_delete)
 
     save_session_state(session)
     msg_parts = [f"[OK] Reset concluído ({removed_count} links/itens removidos)"]

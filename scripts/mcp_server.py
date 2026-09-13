@@ -272,14 +272,18 @@ def handle_route_skills(arguments: dict) -> dict:
         )
 
     activated = res.get("activated", []) if res else []
+    ws_name = Path(manage_skills.get_active_dir().parent).name
+    badge = f"> ⚡ **[AGY Skill Router]** Skills Ativadas: {', '.join(f'`{s}`' for s in activated) if activated else '*(Nenhuma - modo base)*'} | Workspace: `{ws_name}`"
+    
     summary_message = (
-        f"[AGY-SKILL-ROUTER] Ativação concluída para: '{task}'. "
-        f"Skills ativas em .agent/skills/: {', '.join(activated) if activated else 'Nenhuma (tarefa genérica)'}. "
-        f"Consulte o arquivo SKILL.md correspondente para aplicar as regras de engenharia."
+        f"{badge}\n\n"
+        f"[INSTRUÇÃO PARA O AGENTE]: Inclua o badge visual acima no início da sua resposta para confirmar a injeção técnica ao usuário. "
+        f"Consulte o arquivo SKILL.md de cada skill ativa em .agent/skills/ para aplicar rigorosamente suas diretrizes de engenharia."
     )
 
     summary = {
         "status": "success",
+        "badge": badge,
         "message": summary_message,
         "bundle_matched": res.get("bundle") if res else None,
         "activated_skills": activated,

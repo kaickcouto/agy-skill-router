@@ -23,18 +23,20 @@ sys.path.insert(0, str(SCRIPT_DIR))
 ACTION_TRIGGERS = {
     "crie", "criar", "faca", "fazer", "adicione", "adicionar", "refatore", "refatorar",
     "altere", "alterar", "corrija", "corrigir", "implemente", "implementar", "teste", "testar",
-    "migration", "endpoint", "rota", "tela", "bug", "erro", "componente", "setup",
-    "deploy", "docker", "banco", "tabela", "schema", "api", "query", "interface",
-    "script", "hook", "mcp", "view", "controller", "service"
+    "migration", "endpoint", "rotas", "rota", "tela", "telas", "bug", "erro", "componente", "setup",
+    "deploy", "docker", "banco", "tabela", "schema", "api", "apis", "query", "interface",
+    "script", "hook", "mcp", "view", "controller", "service", "crud", "auth", "login",
+    "sql", "postgres", "supabase", "tailwind", "fastapi", "react", "pydantic", "vitest", "playwright",
+    "pdf", "excel", "xlsx", "relatorio", "filtro", "kpi", "dashboard"
 }
 
 def should_trigger_pre_agent(prompt: str) -> bool:
-    """Evita congelar o chat ou gastar cotas em conversas casuais e triviais."""
+    """Evita congelar o chat em conversas casuais enquanto captura demandas técnicas curtas."""
     clean = prompt.lower().strip()
-    if len(clean) < 18:
+    if len(clean) < 6:
         return False
-    # Pula perguntas conceituais simples
-    if clean.startswith(("o que e", "o que é", "como funciona", "qual a diferenca", "qual a diferença", "explique", "me diga")):
+    # Pula saudações e dúvidas conceituais genéricas
+    if clean.startswith(("o que e", "o que é", "como funciona", "qual a diferenca", "qual a diferença", "explique", "me diga", "ola", "oi", "bom dia", "boa tarde", "boa noite")):
         return False
     # Aciona se contiver termo de ação técnica
     return any(term in clean for term in ACTION_TRIGGERS)
