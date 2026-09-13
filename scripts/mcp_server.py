@@ -23,6 +23,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 import manage_skills
 import auto_route
+import pre_agent
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_INFO = {
@@ -186,6 +187,37 @@ TOOLS_DEFINITIONS = [
         },
         "annotations": {
             "idempotentHint": True
+        }
+    },
+    {
+        "name": "pre_agent_plan",
+        "description": "Decompõe a demanda bruta do usuário em um plano cirúrgico (escopo, contrato, checklist) usando IA gratuita do OpenRouter e opcionalmente injeta as skills recomendadas em .agent/skills/.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "task": {
+                    "type": "string",
+                    "description": "Demanda bruta do usuário."
+                },
+                "image_path": {
+                    "type": "string",
+                    "description": "Caminho opcional para print/mockup de tela no disco."
+                },
+                "auto_route_skills": {
+                    "type": "boolean",
+                    "description": "Se verdadeiro, ativa automaticamente as skills recomendadas em .agent/skills/. Padrão: true.",
+                    "default": True
+                },
+                "workspace_dir": {
+                    "type": "string",
+                    "description": "Caminho opcional do projeto alvo."
+                }
+            },
+            "required": ["task"]
+        },
+        "annotations": {
+            "destructiveHint": False,
+            "openWorldHint": True
         }
     }
 ]
@@ -375,6 +407,24 @@ def handle_apply_preset(arguments: dict) -> dict:
             ]
         }
 
+def handle_pre_agent_plan(arguments: dict) -> dict:
+    task = str(arguments.get("task") or "").strip()
+    if not task:
+        raise ValueError("task é obrigatório.")
+    img = arguments.get("image_path")
+    auto_route = bool(arguments.get("auto_route_skills", True))
+    ws = arguments.get("workspace_dir")
+    with scoped_workspace(ws):
+        res = pre_agent.pre_agent_decompose(task, image_path=img, auto_route_skills=auto_route)
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(res, ensure_ascii=False, indent=2)
+                }
+            ]
+        }
+
 TOOL_HANDLERS = {
     "route_skills": handle_route_skills,
     "list_skills": handle_list_skills,
@@ -384,6 +434,7 @@ TOOL_HANDLERS = {
     "unpin_skill": handle_unpin_skill,
     "skill_info": handle_skill_info,
     "apply_preset": handle_apply_preset,
+    "pre_agent_plan": handle_pre_agent_plan,
 }
 
 def send_json(data: dict):

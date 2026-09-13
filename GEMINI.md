@@ -9,9 +9,13 @@ Este projeto opera como o roteador dinâmico de habilidades técnicas do Antigra
    - **Tarefas Complexas**: Para demandas multi-stack (ex: Banco + Frontend + Testes), passe `top_k=3` a `6` em `route_skills(task='...', top_k=4)` ou no CLI com `--top-k 4`.
    - Isso injetará instantaneamente as skills especializadas em `.agent/skills/` via Windows Directory Junctions (0ms).
 
-2. **Inspeção de Documentação da Skill**:
+2. **Pré-Agente & Decomposição Gratuita (OpenRouter)**:
+   - Para pedidos informais, complexos ou com imagens/prints, execute `python scripts/pre_agent.py '<tarefa>' --route` (ou chame a tool MCP `pre_agent_plan(task='...', auto_route_skills=True)`).
+   - Isso usa modelos gratuitos em cascata para extrair escopo, contrato e checklist, injetando as skills automaticamente sem gastar tokens do modelo principal.
+
+3. **Inspeção de Documentação da Skill**:
    - Para entender os gatilhos e regras de uma skill antes de aplicá-la, consulte a tool MCP `skill_info(skill_id)` ou leia o recurso `skills://active/<skill_id>`.
 
-3. **Economia de Contexto & Reset**:
+4. **Economia de Contexto & Reset**:
    - Ao finalizar a implementação de uma demanda ou antes de trocar de contexto, execute `reset_skills()` ou `python scripts/auto_route.py reset`.
    - O hook nativo `Stop` do AGY em `.agent/hooks.json` e o hook git `post-commit` executam a limpeza automática como salvaguarda.

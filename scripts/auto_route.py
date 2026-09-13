@@ -285,11 +285,34 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
         activated = add(selected_ids)
     else:
         confidence = results[0][0] if results else 0.0
-        status = "fallback_base_mode"
-        if pinned:
-            print(f"[*] Nenhuma skill atingiu o limiar de confiança ({confidence:.2f} < {threshold}). Fallback: modo base (mantidas {len(pinned)} fixadas).")
-        else:
-            print(f"[*] Nenhuma skill atingiu o limiar de confiança ({confidence:.2f} < {threshold}). Fallback: modo base sem custo extra.")
+        # 3. Resgate por Expansão Semântica com Pré-Agente Gratuito
+        try:
+            import pre_agent
+            print(f"[*] Limiar não atingido ({confidence:.2f} < {threshold}). Consultando expansão semântica gratuita...")
+            exp_terms = pre_agent.expand_query(prompt)
+            if exp_terms:
+                exp_query = f"{prompt} {' '.join(exp_terms)}"
+                exp_results = index.score(exp_query, category_filter=category, block_filter=block)
+                exp_results.sort(key=disambiguation_key, reverse=True)
+                exp_selected = [r for r in exp_results if r[0] >= threshold][:top_k]
+                if exp_selected:
+                    selected_results = exp_selected
+                    selected_ids = [r[1] for r in exp_selected]
+                    confidence = selected_results[0][0]
+                    status = "semantic_routed"
+                    print(f"[*] [SUCESSO SEMÂNTICO] Termos descobertos: {', '.join(exp_terms[:4])}")
+                    print(f"[*] Roteando automaticamente para: {', '.join(selected_ids)} (Confiança: {confidence:.2f} >= {threshold})")
+                    activated = add(selected_ids)
+        except Exception:
+            pass
+
+        if not selected_ids:
+            confidence = results[0][0] if results else 0.0
+            status = "fallback_base_mode"
+            if pinned:
+                print(f"[*] Nenhuma skill atingiu o limiar de confiança ({confidence:.2f} < {threshold}). Fallback: modo base (mantidas {len(pinned)} fixadas).")
+            else:
+                print(f"[*] Nenhuma skill atingiu o limiar de confiança ({confidence:.2f} < {threshold}). Fallback: modo base sem custo extra.")
 
     if explain:
         print("\n--- [EXPLAIN / BM25 RANKING] ---")
@@ -441,4 +464,14 @@ if __name__ == "__main__":
 
         clean_args = [a for a in args if not a.startswith("--") and a not in (category, block, str(top_k))]
         prompt = " ".join(clean_args)
+
+        if "--plan" in args or "--pre" in args:
+            import pre_agent
+            res = pre_agent.pre_agent_decompose(prompt, auto_route_skills=True, top_k=top_k)
+            print(f"=== PRÉ-AGENTE AGY [Modelo: {res['model_used']}] ===\n")
+            print(res["spec"])
+            print("\n--- SKILLS AGY ATIVADAS ---")
+            print(f"[*] Injetadas em .agent/skills/: {', '.join(res['activated_skills']) if res['activated_skills'] else 'Nenhuma (modo base)'}")
+            sys.exit(0)
+
         route(prompt, top_k=top_k, explain=explain, category=category, block=block)

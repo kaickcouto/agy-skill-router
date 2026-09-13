@@ -47,6 +47,8 @@ Projetado para eliminar o consumo excessivo de tokens: mantém **1.312 skills es
 ## ⚡ Principais Recursos & Blindagem de Engenharia
 
 - **Economia Máxima de Contexto (99.85%)**: As 1.312 skills ficam no vault. O contexto do agente recebe apenas as instruções exatas da demanda em execução.
+- **Pré-Agente Multimodal Gratuito (OpenRouter)**: Decompõe demandas brutas, informais ou prints de interface em escopo, contrato e checklist cirúrgicos usando modelos gratuitos em cascata (`inclusionai/ling-3.0-flash-vl:free`, `nex-agi/nex-n2.5-mini:free`) antes de acionar o modelo principal.
+- **Expansão Semântica Automática de Query**: Se o BM25 receber uma solicitação com score abaixo do limiar (`< 4.0`), consulta silenciosamente a IA gratuita para deduzir termos técnicos ocultos, elevando a precisão de busca sem custo de tokens pagos.
 - **Motor BM25 Puro + Bundles**: Busca lexical de precisão com expansão de sinônimos, suporte a combos multi-skill e latência inferior a 3ms. Sem dependências externas (`pip install` desnecessário).
 - **Montagem Instantânea (0ms)**: Usa Windows Directory Junctions (NTFS) e symlinks. Não duplica arquivos físicos e não requer privilégios de Administrador.
 - **Dupla Trava de Coexistência com Projetos Existentes**:
@@ -55,14 +57,14 @@ Projetado para eliminar o consumo excessivo de tokens: mantém **1.312 skills es
   - **Remoção Segura via `os.rmdir`**: Junções no Windows são desfeitas usando `os.rmdir` (API Win32 `RemoveDirectory`), garantindo que o diretório de destino original nunca seja afetado.
 - **Isolamento de Workspace no Servidor MCP (`scoped_workspace`)**:
   - As requisições direcionadas a projetos externos utilizam context manager `try...finally`. O estado global do workspace é revertido após cada chamada, impedindo conflitos em sessões concorrentes.
+- **Hook de Ciclo de Vida do AGY (`PreInvocation` + `Stop`)**:
+  - Intercepta automaticamente o *Submit* do usuário para injetar o plano técnico e as Junctions antes do agente começar a responder, com limpeza automática no término.
 - **Proteção Estrita Contra Path Traversal**:
   - O endpoint de MCP Resources (`skills://active/` e `skills://vault/`) sanitiza identificadores e valida se o caminho final está contido no diretório permitido (`.is_relative_to()`).
 - **Análise de Segurança via AST (`SecurityASTVisitor`)**:
   - A triagem de código das skills inspeciona nós sintáticos do Python (`ast.NodeVisitor`), eliminando falsos positivos em comentários ou strings de markdown.
 - **Regras Centralizadas (`rules.json`)**:
   - Dicionário único para listas de permissão (*whitelist*), expressões regulares de bloqueio, sinônimos, combos e presets.
-- **Extrator Bounded de Gatilhos**:
-  - Captura delimitada a 1.500 caracteres/25 linhas em seções estruturadas, evitando textos inflados no catálogo de metadados.
 - **Diagnóstico 1-Clique (`scripts/doctor.py`)**: Validação de 7 pilares de integridade técnica em milissegundos.
 
 ---
@@ -116,14 +118,27 @@ O script `scripts/setup_agy.py` registra o servidor automaticamente no arquivo g
 | `unpin_skill(skill_id)` | Desafixa e remove a skill. |
 | `skill_info(skill_id)` | Retorna metadados, gatilhos e documentação da skill. |
 | `search_skills(query)` | Busca semântica e pontuação BM25 sem ativar arquivos. |
+| `pre_agent_plan(task, image_path?, auto_route_skills?)` | Decompõe demanda técnica e prints via IA gratuita do OpenRouter e auto-injeta as skills. |
 
 ---
 
 ## 💻 Uso via Linha de Comando (CLI)
 
+### 0. Pré-Agente & Decomposição Gratuita (OpenRouter)
+```bash
+# Decompor a demanda em plano cirúrgico e auto-injetar as skills (-r):
+python scripts/pre_agent.py "criar tabela de pedidos no supabase com trigger de updated_at" -r
+
+# Modo Multimodal (análise de prints/mockups sem custo de tokens pagos):
+python scripts/pre_agent.py "recriar esta tela de checkout" -i "mockups/checkout.png" -r
+
+# Roteamento + Planejamento unificado direto pelo auto_route:
+python scripts/auto_route.py "fazer deploy no vercel com nextjs e tailwind" --plan
+```
+
 ### 1. Roteamento por Demanda
 ```bash
-# Roteamento padrão
+# Roteamento padrão (com resgate por expansão semântica automática se score < 4.0)
 python scripts/auto_route.py "criar migration e tabela com RLS no supabase"
 
 # Explicar scores e triggers selecionados
@@ -187,11 +202,13 @@ agy-skill-router/
 ├── skills_vault/              # 1.312 skills especializadas indexadas
 ├── skills_custom/             # Suas skills personalizadas / prioritárias
 ├── scripts/
-│   ├── auto_route.py          # Motor BM25, Bundles e interface CLI
+│   ├── auto_route.py          # Motor BM25, Expansão Semântica e interface CLI
+│   ├── pre_agent.py           # Pré-Agente Multimodal gratuito via OpenRouter
+│   ├── hook_pre_invocation.py # Hook nativo AGY PreInvocation (interceptação no Submit)
 │   ├── manage_skills.py       # Gestor NTFS (Junctions, Coexistência, Pins, Session)
-│   ├── mcp_server.py          # Servidor MCP stdio (JSON-RPC 2.0 com Scoped Workspace)
+│   ├── mcp_server.py          # Servidor MCP stdio com tool pre_agent_plan
 │   ├── doctor.py              # Diagnóstico de integridade e saúde
-│   ├── setup_agy.py           # Instalador 1-clique com caminhos absolutos
+│   ├── setup_agy.py           # Instalador 1-clique com registro de hooks e MCP
 │   ├── install_hooks.py       # Instalador dinâmico de Git Hooks
 │   ├── benchmark.py           # Suíte de avaliação de precisão e latência
 │   ├── setup_skills.py        # Validador AST e sanitizador de código

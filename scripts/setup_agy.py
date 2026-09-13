@@ -46,22 +46,31 @@ def setup():
     except Exception as e:
         print(f"[!] Erro ao atualizar mcp_config.json: {e}")
 
-    # 2. Configurar Hook Nativo 'Stop' do AGY com caminhos absolutos
+    # 2. Configurar Hooks Nativos do AGY ('Stop' e 'PreInvocation') com caminhos absolutos
     HOOKS_JSON.parent.mkdir(parents=True, exist_ok=True)
-    hook_command = f'"{sys.executable}" "{AUTO_ROUTE_SCRIPT.resolve()}" reset'
+    hook_cleanup = f'"{sys.executable}" "{AUTO_ROUTE_SCRIPT.resolve()}" reset'
+    hook_pre_agent = f'"{sys.executable}" "{(ROOT / "scripts" / "hook_pre_invocation.py").resolve()}"'
     hooks_data = {
         "agy-skill-cleanup": {
             "Stop": [
                 {
                     "type": "command",
-                    "command": hook_command
+                    "command": hook_cleanup
+                }
+            ]
+        },
+        "agy-pre-agent": {
+            "PreInvocation": [
+                {
+                    "type": "command",
+                    "command": hook_pre_agent
                 }
             ]
         }
     }
     with open(HOOKS_JSON, "w", encoding="utf-8") as f:
         json.dump(hooks_data, f, indent=2)
-    print(f"[OK] Hook nativo do AGY configurado com caminho absoluto em: {HOOKS_JSON}")
+    print(f"[OK] Hooks nativos do AGY (Stop + PreInvocation) configurados em: {HOOKS_JSON}")
 
     # 3. Configurar Git Hooks
     sys.path.insert(0, str(ROOT / "scripts"))

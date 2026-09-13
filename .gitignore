@@ -9,6 +9,8 @@ _temp_sources/
 .agent/index_cache.pkl
 .agent/.pinned.json
 .agent/.router_session.json
+.agent/.openrouter_*.json
+.agent/.pre_agent_*
 .agent/hooks.json
 repo_context.txt
 repomix-output.*
