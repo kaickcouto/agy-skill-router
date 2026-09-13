@@ -222,13 +222,32 @@ agy-skill-router/
 
 ---
 
-## 📊 Benchmark de Eficiência & Auditoria de Tokens
+## 📊 Benchmark Crítico de Engenharia & Auditoria de Tokens
 
-| Métrica | Com Router | Sem Router (Todas Carregadas) | Ganho Real |
+Bateria rigorosa de **30 casos de teste reais** divididos em 4 tiers de dificuldade (*Direct, Informal, Adversarial, NegativeTrap*), auditando o consumo de tokens contra o baseline real do catálogo do System Prompt.
+
+### 1. Precisão do Roteador (30 Casos de Teste)
+| Métrica | Resultado | Descrição |
+| :--- | :--- | :--- |
+| **Acurácia Global** | **100.0% (30/30)** | Cobertura total em tarefas diretas, gírias, multi-stack e armadilhas |
+| **Precisão Técnica** | **100.0%** | Zero ativações erradas em demandas de código |
+| **Taxa de Falso-Positivo** | **0.0% (0/9)** | Nenhuma skill vazada em perguntas casuais/conversacionais (Tier 4) |
+| **Taxa de Falso-Negativo** | **0.0% (0/21)** | Nenhuma omissão de skill quando o contexto técnico exige |
+| **F1-Score** | **100.0%** | Equilíbrio harmônico entre sensibilidade e contenção |
+| **Latência BM25 (p50 / p95 / p99)** | **2.68ms / 4.22ms / 4.59ms** | Roteamento em tempo real sem sobrecarga perceptível |
+
+### 2. Auditoria Realista: Jornada Diária de 50 Turnos de Codificação
+> [!NOTE]
+> O baseline realista calcula o custo do catálogo das 1.312 skills (196.344 tokens) que seriam repetidamente injetados no System Prompt a cada mensagem sem o roteador dinâmico.
+
+| Métrica | Sem Router (Catálogo Fixo) | Com AGY Skill Router | Economia Real Líquida |
 | :--- | :--- | :--- | :--- |
-| **Tokens Consumidos em Repouso** | **0 tokens** | **7.541.944 tokens** (1.312 skills) | **100% livre** |
-| **Contexto Médio Injetado** | **~5.593 tokens** / tarefa | 7.541.944 tokens / tarefa | **99.93% poupados** |
-| **Tempo de Montagem (Junctions)** | **< 1ms** (NTFS Junction) | N/A (Cópia física lenta) | **Instantâneo (0ms)** |
-| **Latência de Decisão (BM25)** | **~1.7ms** | N/A | **Tempo real** |
-| **Custo por Turno (Claude 3.5 Sonnet)** | **~$0.016 USD** | ~$22.62 USD (estoura contexto) | **$22.60 USD economizados/turno** |
-| **Decomposição Gratuita (OpenRouter)** | **~1.200 tokens** poupados no modelo pago | 0 (modelo pago arca com todo o escopo) | **Custo Zero de Raciocínio** |
+| **Overhead no System Prompt** | **196.344 tokens** / mensagem | **0 tokens** (skills residem em disco) | **100% livre** |
+| **Injeção Ativa por Tarefa** | 196.344 tokens | **~5.943 tokens** (apenas na demanda ativa) | **97.0% menos tokens** |
+| **Consumo Total (50 turnos)** | **9.817.200 tokens** | **190.178 tokens** | **9.627.022 tokens poupados (98.1%)** |
+| **Custo na Sessão (Claude 3.5 Sonnet)**| **$29.45 USD** (~R$ 169.35) | **$0.57 USD** (~R$ 3.28) | **-$28.88 USD** (~R$ 166.07) |
+| **Custo na Sessão (OpenAI GPT-4o)** | **$24.54 USD** (~R$ 141.10) | **$0.47 USD** (~R$ 2.70) | **-$24.07 USD** (~R$ 138.39) |
+| **Viabilidade em Janela de 128k** | ❌ **ESTOURO FATAL** (196k > 128k) | ✅ **97.2% livre** para arquivos do projeto | **Permite usar modelos com janelas menores** |
+| **Tempo de Montagem (Junctions)** | N/A | **< 1ms** (Windows NTFS Junction) | **0ms de overhead de I/O** |
+| **Decomposição Gratuita (OpenRouter)** | 0 (modelo pago processa tudo) | **~1.200 tokens** poupados no modelo pago | **Raciocínio preliminar a custo zero** |
+

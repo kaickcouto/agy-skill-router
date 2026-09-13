@@ -273,9 +273,14 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
         trig_matches = sum(1 for t in meta.get("triggers", []) if any(normalize(m) in normalize(t) for m in matches))
         return (score, specific_matches, trig_matches)
 
-    results.sort(key=disambiguation_key, reverse=True)
+    def is_valid_selection(r):
+        score, sid, matches = r
+        if score < threshold:
+            return False
+        # Impede falsos positivos: rejeita se todos os matches forem termos genéricos/stopwords
+        return any(m not in GENERIC_TERMS for m in matches)
 
-    selected_results = [r for r in results if r[0] >= threshold][:top_k]
+    selected_results = [r for r in results if is_valid_selection(r)][:top_k]
     selected_ids = [r[1] for r in selected_results]
 
     if selected_ids:

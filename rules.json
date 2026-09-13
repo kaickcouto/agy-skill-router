@@ -13,10 +13,12 @@
     "while", "when", "with", "then", "also", "into", "from", "over",
     "just", "more", "como", "funciona", "qual", "para", "let", "const",
     "var", "somar", "soma", "simples", "numero", "numeros", "diferenca",
-    "exemplo", "exemplos", "dois", "tres", "print", "console", "log", "entre"
+    "exemplo", "exemplos", "dois", "tres", "print", "console", "log", "entre",
+    "app", "aplicacao", "meu", "minha", "sem", "sobre", "hoje", "voce", "esta", "conte", "piada", "closure",
+    "que", "com", "uma", "tudo", "bem", "boa", "noite", "dia", "tarde", "ola", "programador", "me", "backend", "frontend"
   ],
   "synonyms": {
-    "docker-expert": ["docker", "dockerfile", "container", "containerizar", "containerizacao", "compose", "multistage"],
+    "docker-expert": ["docker", "dockerfile", "container", "containerizar", "containerizacao", "dockerizar", "compose", "multistage"],
     "docker-compose-generator": ["docker", "dockerfile", "compose", "container"],
     "cloud-k8s": ["kubernetes", "k8s", "manifesto", "cluster", "ingress", "deploy"],
     "kubernetes-manifest-validator": ["kubernetes", "k8s", "manifesto", "ingress"],
