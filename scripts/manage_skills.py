@@ -20,6 +20,26 @@ ROUTER_ENV_PATH = ROOT / ".env"
 
 CURRENT_WORKSPACE = None
 
+def _resolve_workspace_base() -> Path:
+    if CURRENT_WORKSPACE:
+        return CURRENT_WORKSPACE
+    load_env()
+    ws_env = os.environ.get("AGY_WORKSPACE") or os.environ.get("DEFAULT_WORKSPACE")
+    if ws_env:
+        p = Path(ws_env).resolve()
+        if p.exists():
+            return p
+    cwd = Path.cwd()
+    if (cwd / ".git").exists() and cwd.resolve() != ROOT.resolve():
+        return cwd
+    return ROOT
+
+def _get_agent_folder_name(base: Path) -> str:
+    """Retorna '.agents' se já existir no workspace (padrão Antigravity), senão '.agent'."""
+    if (base / ".agents").exists():
+        return ".agents"
+    return ".agent"
+
 def set_workspace(path: str | Path = None):
     global CURRENT_WORKSPACE
     if path:
@@ -29,28 +49,21 @@ def set_workspace(path: str | Path = None):
         CURRENT_WORKSPACE = None
 
 def get_active_dir() -> Path:
-    if CURRENT_WORKSPACE:
-        d = CURRENT_WORKSPACE / ".agent" / "skills"
-    else:
-        cwd = Path.cwd()
-        if (cwd / ".git").exists() and cwd.resolve() != ROOT.resolve():
-            d = cwd / ".agent" / "skills"
-        else:
-            d = ROOT / ".agent" / "skills"
+    base = _resolve_workspace_base()
+    folder = _get_agent_folder_name(base)
+    d = base / folder / "skills"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 def get_pinned_file() -> Path:
-    base = CURRENT_WORKSPACE if CURRENT_WORKSPACE else Path.cwd()
-    if (base / ".git").exists() and base.resolve() != ROOT.resolve():
-        return base / ".agent" / ".pinned.json"
-    return ROOT / ".agent" / ".pinned.json"
+    base = _resolve_workspace_base()
+    folder = _get_agent_folder_name(base)
+    return base / folder / ".pinned.json"
 
 def get_session_file() -> Path:
-    base = CURRENT_WORKSPACE if CURRENT_WORKSPACE else Path.cwd()
-    if (base / ".git").exists() and base.resolve() != ROOT.resolve():
-        return base / ".agent" / ".router_session.json"
-    return ROOT / ".agent" / ".router_session.json"
+    base = _resolve_workspace_base()
+    folder = _get_agent_folder_name(base)
+    return base / folder / ".router_session.json"
 
 def load_session_state() -> dict:
     sf = get_session_file()
@@ -72,11 +85,12 @@ def ensure_target_gitignore(workspace: Path):
     if not workspace or not workspace.exists():
         return
     gi = workspace / ".gitignore"
-    rule = "\n# AGY Skill Router\n.agent/skills/*\n!.agent/skills/.gitkeep\n.agent/.pinned.json\n.agent/.router_session.json\n"
+    folder = _get_agent_folder_name(workspace)
+    rule = f"\n# AGY Skill Router\n{folder}/skills/*\n!{folder}/skills/.gitkeep\n{folder}/.pinned.json\n{folder}/.router_session.json\n"
     try:
         if gi.exists():
             content = gi.read_text(encoding="utf-8", errors="ignore")
-            if ".agent/skills" not in content:
+            if f"{folder}/skills" not in content and ".agent/skills" not in content:
                 gi.write_text(content.rstrip() + rule, encoding="utf-8")
         else:
             gi.write_text(rule.lstrip(), encoding="utf-8")

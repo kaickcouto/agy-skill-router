@@ -25,8 +25,8 @@ COOLDOWN_SECONDS = 120
 # Carrega .env
 ENV_PATH = ROOT / ".env"
 if ENV_PATH.exists():
-    for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
+    for line in ENV_PATH.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip().lstrip("\ufeff")
         if "=" in line and not line.startswith("#"):
             k, v = line.split("=", 1)
             os.environ.setdefault(k.strip(), v.strip())

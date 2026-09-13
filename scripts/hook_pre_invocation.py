@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import os
 import io
 import re
@@ -68,6 +68,12 @@ def main():
         return
 
     transcript_path = payload.get("transcriptPath")
+    workspace_paths = payload.get("workspacePaths") or []
+    conv_id = payload.get("conversationId", "default")
+    
+    workspace = Path(workspace_paths[0]) if workspace_paths and Path(workspace_paths[0]).exists() else None
+    state_file = (ROOT / ".agent" / f".pre_agent_last_step_{conv_id}") if conv_id else STATE_FILE
+
     step_idx, user_prompt = get_unprocessed_user_request(transcript_path)
 
     # Gating: ignora se for prompt trivial, casual ou não-técnico
@@ -76,9 +82,9 @@ def main():
         return
 
     # Garante idempotência: processa cada mensagem do usuário exatamente uma vez
-    if STATE_FILE.exists():
+    if state_file.exists():
         try:
-            last_processed = int(STATE_FILE.read_text(encoding="utf-8").strip())
+            last_processed = int(state_file.read_text(encoding="utf-8").strip())
             if step_idx <= last_processed:
                 sys.stdout.write("{}\n")
                 return
@@ -87,8 +93,8 @@ def main():
 
     # Registra o step atual antes de chamar o modelo
     try:
-        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        STATE_FILE.write_text(str(step_idx), encoding="utf-8")
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text(str(step_idx), encoding="utf-8")
     except Exception:
         pass
 
@@ -96,6 +102,9 @@ def main():
     buf = io.StringIO()
     try:
         with contextlib.redirect_stdout(buf):
+            import manage_skills
+            if workspace:
+                manage_skills.set_workspace(workspace)
             import pre_agent
             res = pre_agent.pre_agent_decompose(user_prompt, auto_route_skills=True)
         
