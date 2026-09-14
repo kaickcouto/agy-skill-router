@@ -150,6 +150,18 @@
     "testing": ["teste", "testes", "testar", "playwright", "vitest", "cypress", "e2e", "qa", "unitario", "mock", "assert"],
     "data-ai": ["planilha", "planilhas", "excel", "xlsx", "pdf", "relatorio", "relatorios", "devis", "ppa", "pandas", "openpyxl"]
   },
+  "skill_affinity": {
+    "supabase-postgres-best-practices": ["zod-validation-expert", "api-designer", "supabase"],
+    "supabase": ["supabase-postgres-best-practices", "zod-validation-expert"],
+    "python-fastapi-development": ["api-designer", "vitest-skill", "docker-expert"],
+    "fastapi-router-py": ["python-fastapi-development", "api-designer"],
+    "frontend-design": ["tailwind-patterns", "react-component-performance"],
+    "tailwind-patterns": ["frontend-design", "react-component-performance"],
+    "webapp-testing": ["vitest-skill"],
+    "vitest-skill": ["webapp-testing"],
+    "xlsx": ["pdf"],
+    "pdf": ["xlsx"]
+  },
   "official_whitelist": [
     "pdf", "xlsx", "docx", "pptx", "frontend-design", "webapp-testing",
     "mcp-builder", "canvas-design", "algorithmic-art", "brand-guidelines",

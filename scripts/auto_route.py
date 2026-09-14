@@ -34,9 +34,10 @@ PRESETS = {}
 MODULE_HINTS = {}
 PATH_TRIGGERS = {}
 BLOCK_KEYWORDS = {}
+SKILL_AFFINITY = {}
 
 def load_rules():
-    global UNRELATED_FRAMEWORKS, GENERIC_TERMS, SYNONYMS, SKILL_BUNDLES, PRESETS, MODULE_HINTS, PATH_TRIGGERS, BLOCK_KEYWORDS
+    global UNRELATED_FRAMEWORKS, GENERIC_TERMS, SYNONYMS, SKILL_BUNDLES, PRESETS, MODULE_HINTS, PATH_TRIGGERS, BLOCK_KEYWORDS, SKILL_AFFINITY
     if RULES_PATH.exists():
         try:
             with open(RULES_PATH, "r", encoding="utf-8") as f:
@@ -49,6 +50,7 @@ def load_rules():
                 MODULE_HINTS = data.get("module_hints", {})
                 PATH_TRIGGERS = data.get("path_triggers", {})
                 BLOCK_KEYWORDS = data.get("block_keywords", {})
+                SKILL_AFFINITY = data.get("skill_affinity", {})
                 return
         except Exception:
             pass
@@ -377,7 +379,15 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
     # Prioriza skills novas que ainda não estão fixadas/ativas, garantindo vagas do top_k para novas habilidades
     fresh_results = [r for r in results if is_valid_selection(r) and r[1] not in already_pinned]
     if fresh_results:
-        selected_results = fresh_results[:top_k]
+        # Aplica Matriz de Afinidade (Co-occurrence) para elevar a melhor companheira técnica
+        primary_sid = fresh_results[0][1]
+        companions = set(SKILL_AFFINITY.get(primary_sid, []))
+        if len(fresh_results) > 1 and companions and top_k > 1:
+            head = [fresh_results[0]]
+            tail = sorted(fresh_results[1:], key=lambda x: (x[1] in companions, x[0]), reverse=True)
+            selected_results = (head + tail)[:top_k]
+        else:
+            selected_results = fresh_results[:top_k]
     else:
         selected_results = [r for r in results if is_valid_selection(r)][:top_k]
     selected_ids = [r[1] for r in selected_results]

@@ -124,5 +124,17 @@ class TestSkillRouterRegression(unittest.TestCase):
         block = auto_route.detect_primary_block('otimizar indices da tabela postgres')
         self.assertEqual(block, 'database', 'Deve classificar o dominio tematico como database.')
 
+    def test_12_skill_affinity_companion_ranking(self):
+        auto_route.load_rules()
+        companions = auto_route.SKILL_AFFINITY.get('python-fastapi-development', [])
+        self.assertIn('api-designer', companions, 'api-designer deve ser companion de python-fastapi-development.')
+
+    def test_13_binary_index_cache(self):
+        idx = auto_route.get_index()
+        self.assertIsNotNone(idx)
+        self.assertGreaterEqual(len(idx.manifest), 1300)
+        cache_path = ROOT / '.agent' / 'index_cache.pkl'
+        self.assertTrue(cache_path.exists(), 'Cache binario index_cache.pkl deve ser gerado no disco.')
+
 if __name__ == '__main__':
     unittest.main()

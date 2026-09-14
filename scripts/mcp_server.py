@@ -608,6 +608,11 @@ def main():
                         "id": req_id,
                         "result": tool_result
                     })
+                    if tool_name in ("route_skills", "reset_skills", "apply_preset", "pin_skill", "unpin_skill"):
+                        send_json({
+                            "jsonrpc": "2.0",
+                            "method": "notifications/tools/list_changed"
+                        })
                 except (ValueError, FileNotFoundError) as ve:
                     send_json({
                         "jsonrpc": "2.0",
