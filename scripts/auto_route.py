@@ -268,7 +268,10 @@ def detect_git_context() -> list[str]:
         for line in res.stdout.splitlines()[:25]:
             parts = line.strip().split(maxsplit=1)
             if len(parts) == 2:
-                file_path = parts[1].replace("\\", "/")
+                raw_path = parts[1]
+                if " -> " in raw_path:
+                    raw_path = raw_path.split(" -> ", 1)[1]
+                file_path = raw_path.strip().strip('"').replace("\\", "/")
                 file_name = Path(file_path).name
                 for pattern, sids in PATH_TRIGGERS.items():
                     if fnmatch.fnmatch(file_name, pattern) or fnmatch.fnmatch(file_path, pattern):
