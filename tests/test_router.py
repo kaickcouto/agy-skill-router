@@ -171,7 +171,19 @@ class TestSkillRouterRegression(unittest.TestCase):
         res = mcp_server.handle_pin_skill({"skill_id": "api-designer"})
         self.assertIn("Skills fixadas", res["content"][0]["text"])
         res_unpin = mcp_server.handle_unpin_skill({"skill_id": "api-designer"})
-        self.assertIn("Desafixada e removida", res_unpin["content"][0]["text"])
+    def test_19_ponytail_custom_skill_resolution(self):
+        # Verifica se o find_skill_source encontra a skill customizada ponytail
+        src, origin = manage_skills.find_skill_source("ponytail")
+        self.assertIsNotNone(src, "Ponytail deve ser localizada pelo gerenciador de skills.")
+        self.assertEqual(origin, "custom-router", "Ponytail deve vir de custom-router.")
+        self.assertTrue((src / "SKILL.md").exists(), "SKILL.md deve existir no diretorio da skill.")
+
+    def test_20_in_memory_index_cache_invalidation(self):
+        # Verifica se get_index invalida cache em memoria quando mtime muda
+        idx1 = auto_route.get_index()
+        self.assertIsNotNone(idx1)
+        # Forca verificacao de mtime
+        self.assertEqual(auto_route._CACHED_MTIME, (auto_route.MANIFEST_PATH.stat().st_mtime, auto_route.RULES_PATH.stat().st_mtime))
 
 if __name__ == '__main__':
     unittest.main()

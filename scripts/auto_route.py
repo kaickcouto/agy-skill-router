@@ -181,15 +181,17 @@ class BM25Index:
         return scores
 
 _GLOBAL_INDEX = None
+_CACHED_MTIME = None
 
 def get_index() -> BM25Index:
-    global _GLOBAL_INDEX
-    if _GLOBAL_INDEX is not None:
-        return _GLOBAL_INDEX
+    global _GLOBAL_INDEX, _CACHED_MTIME
 
     m_mtime = MANIFEST_PATH.stat().st_mtime if MANIFEST_PATH.exists() else 0
     r_mtime = RULES_PATH.stat().st_mtime if RULES_PATH.exists() else 0
     combined_mtime = (m_mtime, r_mtime)
+
+    if _GLOBAL_INDEX is not None and _CACHED_MTIME == combined_mtime:
+        return _GLOBAL_INDEX
 
     if CACHE_FILE.exists():
         try:
@@ -197,6 +199,7 @@ def get_index() -> BM25Index:
                 cached_mtime, cached_index = pickle.load(f)
             if cached_mtime == combined_mtime:
                 _GLOBAL_INDEX = cached_index
+                _CACHED_MTIME = combined_mtime
                 return _GLOBAL_INDEX
         except Exception:
             pass
@@ -204,6 +207,7 @@ def get_index() -> BM25Index:
     load_rules()
     manifest = get_manifest()
     _GLOBAL_INDEX = BM25Index(manifest)
+    _CACHED_MTIME = combined_mtime
     try:
         CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(CACHE_FILE, "wb") as f:
