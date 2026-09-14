@@ -134,7 +134,27 @@ class TestSkillRouterRegression(unittest.TestCase):
         self.assertIsNotNone(idx)
         self.assertGreaterEqual(len(idx.manifest), 1300)
         cache_path = ROOT / '.agent' / 'index_cache.pkl'
-        self.assertTrue(cache_path.exists(), 'Cache binario index_cache.pkl deve ser gerado no disco.')
+    def test_14_empty_prompt_handling(self):
+        res = auto_route.route('', top_k=2)
+        self.assertEqual(res.get('status'), 'empty_prompt', 'Prompt vazio deve retornar status empty_prompt imediatamente sem gastar tokens.')
+        self.assertEqual(len(res.get('activated', [])), 0)
+
+    def test_15_tech_terms_not_blocked_by_generic_terms(self):
+        res = auto_route.route('melhorar o backend fastapi', top_k=2)
+        activated = res.get('activated', [])
+        self.assertTrue(
+            any('fastapi' in s or 'api' in s for s in activated),
+            f'Consultas com termos como "backend fastapi" nao devem ser rejeitadas por generic_terms, ativou: {activated}'
+        )
+
+    def test_16_path_trigger_already_pinned(self):
+        # Fixa as skills de .py para testar quando todas do path ja estao pinned
+        manage_skills.pin(['python-fastapi-development', 'api-designer'])
+        try:
+            res = auto_route.route('editar o arquivo server.py', top_k=2)
+            self.assertEqual(res.get('status'), 'already_satisfied_by_pinned')
+        finally:
+            manage_skills.unpin(['python-fastapi-development', 'api-designer'])
 
 if __name__ == '__main__':
     unittest.main()

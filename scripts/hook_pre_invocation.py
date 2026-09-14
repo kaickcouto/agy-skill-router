@@ -3,6 +3,7 @@ import os
 import io
 import re
 import json
+import time
 import contextlib
 from pathlib import Path
 
@@ -97,6 +98,14 @@ def main():
     try:
         state_file.parent.mkdir(parents=True, exist_ok=True)
         state_file.write_text(str(step_idx), encoding="utf-8")
+        # Limpeza periódica de arquivos de estado com mais de 48 horas
+        now_ts = time.time()
+        for old_f in state_file.parent.glob(".pre_agent_last_step_*"):
+            try:
+                if now_ts - old_f.stat().st_mtime > 172800:
+                    old_f.unlink()
+            except Exception:
+                pass
     except Exception:
         pass
 

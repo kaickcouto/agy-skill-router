@@ -5,8 +5,7 @@
     "spring", "ruby", "rails", "php", "csharp", "dotnet", "rust"
   ],
   "generic_terms": [
-    "python", "javascript", "typescript", "node", "code", "codigo",
-    "script", "funcao", "function", "arquivo", "file", "criar",
+    "code", "codigo", "script", "funcao", "function", "arquivo", "file", "criar",
     "fazer", "gerar", "escreva", "build", "create", "make", "task",
     "ajustar", "modificar", "corrigir", "adicionar", "novo", "loop",
     "loops", "logica", "explicar", "duvida", "ajuda", "array", "lista",
@@ -15,7 +14,7 @@
     "var", "somar", "soma", "simples", "numero", "numeros", "diferenca",
     "exemplo", "exemplos", "dois", "tres", "print", "console", "log", "entre",
     "app", "aplicacao", "meu", "minha", "sem", "sobre", "hoje", "voce", "esta", "conte", "piada", "closure",
-    "que", "com", "uma", "tudo", "bem", "boa", "noite", "dia", "tarde", "ola", "programador", "me", "backend", "frontend"
+    "que", "com", "uma", "tudo", "bem", "boa", "noite", "dia", "tarde", "ola", "programador", "me"
   ],
   "synonyms": {
     "docker-expert": ["docker", "dockerfile", "container", "containerizar", "containerizacao", "dockerizar", "compose", "multistage"],

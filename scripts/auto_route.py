@@ -304,6 +304,17 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
     pinned = get_pinned()
     already_pinned = set(pinned)
 
+    # 0. Early Exit: Prompt vazio ou só espaços
+    if not prompt or not str(prompt).strip():
+        return {
+            "status": "empty_prompt",
+            "confidence": 0.0,
+            "threshold": threshold,
+            "skills": [],
+            "activated": [],
+            "pinned": list(pinned)
+        }
+
     # 1. Path-Triggered Context: Menção direta a arquivos no prompt (Cursor style)
     path_skills = detect_path_in_prompt(prompt)
     if path_skills:
@@ -314,6 +325,9 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
             print(f"[PATH-TRIGGER] Extensão/Arquivo detectado no prompt -> {', '.join(selected)}")
             activated = add(selected)
             return {"status": "path_trigger_match", "confidence": 10.0, "threshold": threshold, "skills": selected, "activated": activated, "pinned": list(pinned)}
+        else:
+            # Todas as skills do caminho já estão fixadas/ativas
+            return {"status": "already_satisfied_by_pinned", "confidence": 10.0, "threshold": threshold, "skills": path_skills, "activated": [], "pinned": list(pinned)}
 
     # 2. Verifica Módulo do Projeto (CMS Module Hints)
     mod_service, mod_skills = check_module_hints(prompt)
@@ -402,7 +416,10 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
         # 3. Resgate por Expansão Semântica com Pré-Agente Gratuito
         try:
             import pre_agent
-            print(f"[*] Limiar não atingido ({confidence:.2f} < {threshold}). Consultando expansão semântica gratuita...")
+            if results and results[0][0] >= threshold:
+                print(f"[*] Termos específicos não detectados nos resultados principais. Consultando expansão semântica gratuita...")
+            else:
+                print(f"[*] Limiar não atingido ({confidence:.2f} < {threshold}). Consultando expansão semântica gratuita...")
             exp_terms = pre_agent.expand_query(prompt)
             if exp_terms:
                 exp_query = f"{prompt} {' '.join(exp_terms)}"

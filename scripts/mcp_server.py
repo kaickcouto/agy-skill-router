@@ -250,11 +250,12 @@ def scoped_workspace(ws_arg: str | None):
     try:
         if ws_arg and isinstance(ws_arg, str):
             ws_path = Path(ws_arg).resolve()
-            if ws_path.exists() and ws_path.is_dir():
-                manage_skills.set_workspace(ws_path)
+            target_dir = ws_path.parent if ws_path.is_file() else ws_path
+            if target_dir.exists() and target_dir.is_dir():
+                manage_skills.set_workspace(target_dir)
         yield
     finally:
-        manage_skills.CURRENT_WORKSPACE = old_ws
+        manage_skills.set_workspace(old_ws)
 
 def handle_route_skills(arguments: dict) -> dict:
     task = str(arguments.get("task") or "").strip()
