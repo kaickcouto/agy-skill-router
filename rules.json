@@ -127,6 +127,29 @@
       "skills": ["frontend-design", "tailwind-patterns"]
     }
   },
+  "path_triggers": {
+    "*.sql": ["supabase-postgres-best-practices", "supabase"],
+    "*.py": ["python-fastapi-development", "api-designer"],
+    "*.tsx": ["frontend-design", "tailwind-patterns"],
+    "*.jsx": ["frontend-design", "tailwind-patterns"],
+    "*.css": ["tailwind-patterns"],
+    "*.spec.ts": ["webapp-testing", "vitest-skill"],
+    "*.test.ts": ["vitest-skill", "webapp-testing"],
+    "*.test.py": ["vitest-skill"],
+    "*.xlsx": ["xlsx"],
+    "*.csv": ["xlsx"],
+    "*.pdf": ["pdf"],
+    "Dockerfile*": ["docker-expert"],
+    "docker-compose*.yml": ["docker-expert"],
+    "*.yaml": ["cloud-k8s"]
+  },
+  "block_keywords": {
+    "database": ["banco", "tabela", "tabelas", "sql", "postgres", "postgresql", "supabase", "rls", "migration", "migrations", "coluna", "indices", "schema"],
+    "backend": ["api", "apis", "endpoint", "endpoints", "rota", "rotas", "fastapi", "pydantic", "controller", "service", "backend", "crud", "auth", "jwt"],
+    "frontend": ["tela", "telas", "interface", "ui", "ux", "componente", "componentes", "layout", "visual", "react", "tailwind", "css", "render", "modal", "botao"],
+    "testing": ["teste", "testes", "testar", "playwright", "vitest", "cypress", "e2e", "qa", "unitario", "mock", "assert"],
+    "data-ai": ["planilha", "planilhas", "excel", "xlsx", "pdf", "relatorio", "relatorios", "devis", "ppa", "pandas", "openpyxl"]
+  },
   "official_whitelist": [
     "pdf", "xlsx", "docx", "pptx", "frontend-design", "webapp-testing",
     "mcp-builder", "canvas-design", "algorithmic-art", "brand-guidelines",

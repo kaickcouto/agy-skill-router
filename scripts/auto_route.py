@@ -32,9 +32,11 @@ SYNONYMS = {}
 SKILL_BUNDLES = {}
 PRESETS = {}
 MODULE_HINTS = {}
+PATH_TRIGGERS = {}
+BLOCK_KEYWORDS = {}
 
 def load_rules():
-    global UNRELATED_FRAMEWORKS, GENERIC_TERMS, SYNONYMS, SKILL_BUNDLES, PRESETS, MODULE_HINTS
+    global UNRELATED_FRAMEWORKS, GENERIC_TERMS, SYNONYMS, SKILL_BUNDLES, PRESETS, MODULE_HINTS, PATH_TRIGGERS, BLOCK_KEYWORDS
     if RULES_PATH.exists():
         try:
             with open(RULES_PATH, "r", encoding="utf-8") as f:
@@ -45,6 +47,8 @@ def load_rules():
                 SKILL_BUNDLES = data.get("skill_bundles", {})
                 PRESETS = data.get("presets", {})
                 MODULE_HINTS = data.get("module_hints", {})
+                PATH_TRIGGERS = data.get("path_triggers", {})
+                BLOCK_KEYWORDS = data.get("block_keywords", {})
                 return
         except Exception:
             pass
@@ -122,9 +126,10 @@ class BM25Index:
 
         scores = []
         for sid, meta in self.manifest.items():
-            if category_filter and meta.get("category") != category_filter:
+            domain = meta.get("category") or meta.get("thematic_block")
+            if category_filter and domain != category_filter:
                 continue
-            if block_filter and meta.get("thematic_block") != block_filter:
+            if block_filter and domain != block_filter:
                 continue
 
             norm_id = normalize(sid)
@@ -234,11 +239,103 @@ def apply_preset(name: str) -> bool:
     pin(skills_to_pin)
     return True
 
+def detect_git_context() -> list[str]:
+    """Inspeciona git status do workspace ativo para inferir tecnologias dos arquivos modificados (estilo Aider)."""
+    try:
+        from manage_skills import _resolve_workspace_base
+        ws = _resolve_workspace_base()
+        if not ws or not (ws / ".git").exists():
+            return []
+        import subprocess
+        import fnmatch
+        res = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(ws),
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if res.returncode != 0 or not res.stdout.strip():
+            return []
+        
+        detected_skills = []
+        for line in res.stdout.splitlines()[:25]:
+            parts = line.strip().split(maxsplit=1)
+            if len(parts) == 2:
+                file_path = parts[1].replace("\\", "/")
+                file_name = Path(file_path).name
+                for pattern, sids in PATH_TRIGGERS.items():
+                    if fnmatch.fnmatch(file_name, pattern) or fnmatch.fnmatch(file_path, pattern):
+                        detected_skills.extend(sids)
+        seen = set()
+        return [s for s in detected_skills if not (s in seen or seen.add(s))]
+    except Exception:
+        return []
+
+def detect_path_in_prompt(prompt: str) -> list[str]:
+    """Extrai extensões ou caminhos de arquivos mencionados diretamente no prompt (estilo Cursor)."""
+    import fnmatch
+    detected = []
+    words = re.findall(r'[\w\.\-/\\_]+', prompt)
+    for word in words:
+        name = Path(word).name
+        for pattern, sids in PATH_TRIGGERS.items():
+            if fnmatch.fnmatch(name, pattern) or fnmatch.fnmatch(word, pattern):
+                detected.extend(sids)
+    seen = set()
+    return [s for s in detected if not (s in seen or seen.add(s))]
+
+def detect_primary_block(prompt: str) -> str | None:
+    """Classifica o domínio temático principal (Two-Tier Routing) para eliminar ruído inter-stack."""
+    tokens = set(tokenize(prompt))
+    best_block = None
+    best_matches = 0
+    for block_name, keywords in BLOCK_KEYWORDS.items():
+        matches = sum(1 for kw in keywords if kw in tokens)
+        if matches > best_matches and matches >= 2:
+            best_matches = matches
+            best_block = block_name
+    return best_block
+
 def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = False, category: str = None, block: str = None):
-    # 1. Verifica Módulo do Projeto (CMS Module Hints)
-    mod_service, mod_skills = check_module_hints(prompt)
-    bundle_id, bundle_skills = check_bundles(prompt)
+    load_rules()
     pinned = get_pinned()
+    already_pinned = set(pinned)
+
+    # 1. Path-Triggered Context: Menção direta a arquivos no prompt (Cursor style)
+    path_skills = detect_path_in_prompt(prompt)
+    if path_skills:
+        fresh_path = [s for s in path_skills if s not in already_pinned]
+        if fresh_path:
+            reset()
+            selected = fresh_path[:top_k]
+            print(f"[PATH-TRIGGER] Extensão/Arquivo detectado no prompt -> {', '.join(selected)}")
+            activated = add(selected)
+            return {"status": "path_trigger_match", "confidence": 10.0, "threshold": threshold, "skills": selected, "activated": activated, "pinned": list(pinned)}
+
+    # 2. Verifica Módulo do Projeto (CMS Module Hints)
+    mod_service, mod_skills = check_module_hints(prompt)
+    if mod_service:
+        reset()
+        print(f"[MÓDULO CMS] Serviço Detectado: '{mod_service}' -> {', '.join(mod_skills)}")
+        activated = add(mod_skills)
+        return {"status": "module_match", "confidence": 10.0, "threshold": threshold, "module": mod_service, "activated": activated, "pinned": list(pinned)}
+
+    # 3. Bundles Coordenados de Skills
+    bundle_id, bundle_skills = check_bundles(prompt)
+    if bundle_id:
+        reset()
+        b_title = SKILL_BUNDLES[bundle_id]["title"]
+        print(f"[BUNDLE] Combo Ativado: '{b_title}' -> {', '.join(bundle_skills)}")
+        activated = add(bundle_skills)
+        return {"status": "bundle_match", "confidence": 10.0, "threshold": threshold, "bundle": bundle_id, "activated": activated, "pinned": list(pinned)}
+
+    # 4. Two-Tier Routing: Dedução de Bloco Temático para eliminar ruído cruzado
+    if not block and not category:
+        inferred_block = detect_primary_block(prompt)
+        if inferred_block:
+            block = inferred_block
+            print(f"[TWO-TIER] Domínio Classificado: '{block}'")
 
     print(f"[*] Tarefa: '{prompt}'")
     if block:
@@ -246,19 +343,15 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
     elif category:
         print(f"[*] Filtro de Categoria: '{category}'")
 
+    # 5. Git-Aware Context: Detecta tecnologias ativas se o prompt for curto/vago (Aider style)
+    git_skills = detect_git_context() if len(tokenize(prompt)) <= 4 else []
+    if git_skills:
+        fresh_git = [s for s in git_skills if s not in already_pinned]
+        if fresh_git:
+            print(f"[GIT-AWARE] Contexto deduzido dos arquivos modificados -> {', '.join(fresh_git[:2])}")
+
     reset()
-
     activated = []
-    if mod_service:
-        print(f"[MÓDULO CMS] Serviço Detectado: '{mod_service}' -> {', '.join(mod_skills)}")
-        activated = add(mod_skills)
-        return {"status": "module_match", "confidence": 10.0, "threshold": threshold, "module": mod_service, "activated": activated, "pinned": list(pinned)}
-
-    if bundle_id:
-        b_title = SKILL_BUNDLES[bundle_id]["title"]
-        print(f"[BUNDLE] Combo Ativado: '{b_title}' -> {', '.join(bundle_skills)}")
-        activated = add(bundle_skills)
-        return {"status": "bundle_match", "confidence": 10.0, "threshold": threshold, "bundle": bundle_id, "activated": activated, "pinned": list(pinned)}
 
     # 2. Roteamento BM25 por Relevância com Desempate de Colisão
     index = get_index()
@@ -314,6 +407,15 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
                     activated = add(selected_ids)
         except Exception:
             pass
+
+        if not selected_ids and git_skills:
+            fresh_git = [s for s in git_skills if s not in already_pinned]
+            if fresh_git:
+                selected_ids = fresh_git[:top_k]
+                status = "git_aware_match"
+                confidence = 8.0
+                print(f"[*] [GIT-AWARE] Roteando para skills dos arquivos modificados: {', '.join(selected_ids)}")
+                activated = add(selected_ids)
 
         if not selected_ids:
             confidence = results[0][0] if results else 0.0

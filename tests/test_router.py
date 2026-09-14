@@ -112,5 +112,17 @@ class TestSkillRouterRegression(unittest.TestCase):
         parsed = json.loads(out.strip())
         self.assertIsInstance(parsed, dict, 'Hook PreInvocation deve retornar objeto JSON.')
 
+    def test_10_path_triggered_routing(self):
+        res = auto_route.route('ajustar o arquivo migrations_001.sql', top_k=2)
+        activated = res.get('activated', [])
+        self.assertTrue(
+            any('supabase' in s for s in activated),
+            f'Extensao .sql deve acionar skills de banco/supabase, ativou: {activated}'
+        )
+
+    def test_11_two_tier_domain_classification(self):
+        block = auto_route.detect_primary_block('otimizar indices da tabela postgres')
+        self.assertEqual(block, 'database', 'Deve classificar o dominio tematico como database.')
+
 if __name__ == '__main__':
     unittest.main()
