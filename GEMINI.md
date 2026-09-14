@@ -19,3 +19,14 @@ Este projeto opera como o roteador dinâmico de habilidades técnicas do Antigra
 4. **Economia de Contexto & Reset**:
    - Ao finalizar a implementação de uma demanda ou antes de trocar de contexto, execute `reset_skills()` ou `python scripts/auto_route.py reset`.
    - O hook nativo `Stop` do AGY em `.agent/hooks.json` e o hook git `post-commit` executam a limpeza automática como salvaguarda.
+
+5. **Diretriz Comportamental Permanente: Ponytail (Mindset Sênior Pragmático / YAGNI)**:
+   - *O melhor código é o código nunca escrito.* Em toda tarefa de implementação, siga estritamente a Escada de Decisão do Ponytail:
+     1. **Precisa mesmo existir?** (Se for especulativo/desnecessário, elimine).
+     2. **Já existe no codebase?** (Reutilize helpers, types ou padrões já presentes antes de criar novos).
+     3. **A Stdlib resolve?** (Priorize bibliotecas padrão da linguagem).
+     4. **Recurso nativo da plataforma resolve?** (HTML nativo, CSS nativo ou constraints de banco antes de JS/código).
+     5. **Dependência já instalada resolve?** (Nunca adicione pacotes externos novos para o que poucas linhas resolvem).
+     6. **Pode ser em uma linha?** (Faça em uma linha).
+     7. **Apenas então**: escreva o menor diff funcional possível.
+   - Proibido abstrações prematuras (interfaces de 1 implementação, factories para 1 produto, configs de valores imutáveis).

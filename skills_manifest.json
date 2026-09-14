@@ -31808,5 +31808,24 @@
       "zustand-store-ts"
     ],
     "required_env": []
+  },
+  {
+    "id": "ponytail",
+    "target": "ponytail",
+    "category": "development",
+    "thematic_block": "architecture",
+    "description": "Forces the laziest solution that actually works, simplest, shortest, most minimal. Channels a senior dev who has seen everything: question whether the task needs to exist at all (YAGNI), reach for standard library before custom code, native platform features before dependencies, one line before fifty.",
+    "triggers": [
+      "ponytail",
+      "yagni",
+      "lazy",
+      "minimalista",
+      "simplificar",
+      "enxuto",
+      "bloat",
+      "over-engineering",
+      "refatorar"
+    ],
+    "call_intent": "Injeta mindset de desenvolvedor sênior pragmático e minimalista, priorizando diffs mínimos, stdlib e rejeitando over-engineering."
   }
 ]

@@ -45,7 +45,8 @@
     "slack-gif-creator": ["gif", "animacao", "slack", "sticker", "frame"],
     "brand-guidelines": ["marca", "identidade", "branding", "paleta", "cores", "padrao"],
     "doc-coauthoring": ["coautoria", "revisao", "editorial", "redigir", "co-autor"],
-    "internal-comms": ["comunicacao", "comunicado", "anuncio", "newsletter", "memorando"]
+    "internal-comms": ["comunicacao", "comunicado", "anuncio", "newsletter", "memorando"],
+    "ponytail": ["ponytail", "yagni", "lazy", "minimalista", "simplificar", "enxuto", "bloat", "over-engineering"]
   },
   "skill_bundles": {
     "backend-fastapi-api": {
@@ -165,7 +166,7 @@
     "pdf", "xlsx", "docx", "pptx", "frontend-design", "webapp-testing",
     "mcp-builder", "canvas-design", "algorithmic-art", "brand-guidelines",
     "doc-coauthoring", "internal-comms", "slack-gif-creator", "theme-factory",
-    "web-artifacts-builder", "claude-api", "academy-guide"
+    "web-artifacts-builder", "claude-api", "academy-guide", "ponytail"
   ],
   "blocked_domains_regex": [
     "(^|-)(marketing|copywriting|seo|affiliate|growth|funnel|dropship|influencer|viral|content-strategist|blogwriting)($|-)",
