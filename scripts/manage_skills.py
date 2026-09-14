@@ -150,28 +150,23 @@ def is_junction_or_link(path: Path) -> bool:
     return False
 
 def remove_item(path: Path):
-    if path.name == ".gitkeep":
-        return
-
-    try:
-        path.absolute().relative_to(get_active_dir().absolute())
-    except ValueError:
-        print(f"[ALERTA] Bloqueada exclusão fora do diretório ativo: {path}")
-        return
-
-    session = load_session_state()
-    is_managed_by_router = path.name in session
-
-def remove_item(path: Path):
     remove_items_batch([path])
 
 def remove_items_batch(paths: list[Path]):
     if not paths:
         return
     session = load_session_state()
+    active_dir_abs = get_active_dir().absolute()
     targets_to_clean = []
 
     for path in paths:
+        if path.name == ".gitkeep":
+            continue
+        try:
+            path.absolute().relative_to(active_dir_abs)
+        except ValueError:
+            print(f"[ALERTA] Bloqueada exclusão fora do diretório ativo: {path}")
+            continue
         is_managed = path.name in session
         if path.is_dir() and not is_junction_or_link(path) and not is_managed:
             continue

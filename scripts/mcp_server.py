@@ -126,6 +126,10 @@ TOOLS_DEFINITIONS = [
                 "skill_id": {
                     "type": "string",
                     "description": "ID da skill a fixar (ex: 'supabase-postgres-best-practices')."
+                },
+                "workspace_dir": {
+                    "type": "string",
+                    "description": "Caminho opcional do projeto alvo."
                 }
             },
             "required": ["skill_id"]
@@ -143,6 +147,10 @@ TOOLS_DEFINITIONS = [
                 "skill_id": {
                     "type": "string",
                     "description": "ID da skill a desafixar."
+                },
+                "workspace_dir": {
+                    "type": "string",
+                    "description": "Caminho opcional do projeto alvo."
                 }
             },
             "required": ["skill_id"]
@@ -360,27 +368,31 @@ def handle_search_skills(arguments: dict) -> dict:
 
 def handle_pin_skill(arguments: dict) -> dict:
     sid = validate_skill_id(arguments.get("skill_id"))
-    stdout_text, _ = capture_execution(manage_skills.pin, [sid])
-    return {
-        "content": [
-            {
-                "type": "text",
-                "text": stdout_text
-            }
-        ]
-    }
+    ws = arguments.get("workspace_dir")
+    with scoped_workspace(ws):
+        stdout_text, _ = capture_execution(manage_skills.pin, [sid])
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": stdout_text
+                }
+            ]
+        }
 
 def handle_unpin_skill(arguments: dict) -> dict:
     sid = validate_skill_id(arguments.get("skill_id"))
-    stdout_text, _ = capture_execution(manage_skills.unpin, [sid])
-    return {
-        "content": [
-            {
-                "type": "text",
-                "text": stdout_text
-            }
-        ]
-    }
+    ws = arguments.get("workspace_dir")
+    with scoped_workspace(ws):
+        stdout_text, _ = capture_execution(manage_skills.unpin, [sid])
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": stdout_text
+                }
+            ]
+        }
 
 def handle_skill_info(arguments: dict) -> dict:
     sid = validate_skill_id(arguments.get("skill_id"))
@@ -493,8 +505,12 @@ def main():
                     "result": {
                         "protocolVersion": PROTOCOL_VERSION,
                         "capabilities": {
-                            "tools": {},
-                            "resources": {}
+                            "tools": {
+                                "listChanged": True
+                            },
+                            "resources": {
+                                "listChanged": True
+                            }
                         },
                         "serverInfo": SERVER_INFO
                     }
@@ -613,6 +629,10 @@ def main():
                         send_json({
                             "jsonrpc": "2.0",
                             "method": "notifications/tools/list_changed"
+                        })
+                        send_json({
+                            "jsonrpc": "2.0",
+                            "method": "notifications/resources/list_changed"
                         })
                 except (ValueError, FileNotFoundError) as ve:
                     send_json({

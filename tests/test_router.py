@@ -134,6 +134,8 @@ class TestSkillRouterRegression(unittest.TestCase):
         self.assertIsNotNone(idx)
         self.assertGreaterEqual(len(idx.manifest), 1300)
         cache_path = ROOT / '.agent' / 'index_cache.pkl'
+        self.assertTrue(cache_path.exists(), 'Cache binario index_cache.pkl deve ser gerado no disco.')
+
     def test_14_empty_prompt_handling(self):
         res = auto_route.route('', top_k=2)
         self.assertEqual(res.get('status'), 'empty_prompt', 'Prompt vazio deve retornar status empty_prompt imediatamente sem gastar tokens.')
@@ -155,6 +157,21 @@ class TestSkillRouterRegression(unittest.TestCase):
             self.assertEqual(res.get('status'), 'already_satisfied_by_pinned')
         finally:
             manage_skills.unpin(['python-fastapi-development', 'api-designer'])
+
+    def test_17_path_traversal_guard_in_remove(self):
+        outside_path = ROOT.parent / "unsafe_file.txt"
+        # Deve recusar exclusao silenciosa ou alertar sem levantar excecao
+        try:
+            manage_skills.remove_items_batch([outside_path])
+        except Exception as e:
+            self.fail(f"remove_items_batch nao deve quebrar ao receber path externo: {e}")
+
+    def test_18_mcp_scoped_pin_unpin(self):
+        import mcp_server
+        res = mcp_server.handle_pin_skill({"skill_id": "api-designer"})
+        self.assertIn("Skills fixadas", res["content"][0]["text"])
+        res_unpin = mcp_server.handle_unpin_skill({"skill_id": "api-designer"})
+        self.assertIn("Desafixada e removida", res_unpin["content"][0]["text"])
 
 if __name__ == '__main__':
     unittest.main()
