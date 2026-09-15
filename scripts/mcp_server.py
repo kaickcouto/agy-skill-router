@@ -561,30 +561,23 @@ def main():
                     raw_sid = uri.replace("skills://active/", "").strip("/")
                     try:
                         sid = validate_skill_id(raw_sid)
-                        target_dir = (cur_active / sid).resolve()
-                        if not target_dir.is_relative_to(cur_active.resolve()):
-                            content = f"[!] Acesso negado: Tentativa de Path Traversal detectada em '{raw_sid}'."
+                        active_item = cur_active / sid
+                        md_path = active_item / "SKILL.md"
+                        if md_path.exists():
+                            content = md_path.read_text(encoding="utf-8", errors="ignore")
                         else:
-                            md_path = target_dir / "SKILL.md"
-                            if md_path.exists():
-                                content = md_path.read_text(encoding="utf-8", errors="ignore")
-                            else:
-                                content = f"[!] Arquivo SKILL.md não encontrado para '{sid}' em {cur_active}."
+                            content = f"[!] Arquivo SKILL.md não encontrado para '{sid}' em {cur_active}."
                     except ValueError as ve:
                         content = f"[!] ID de skill inválido: {str(ve)}"
                 elif uri.startswith("skills://vault/"):
                     raw_sid = uri.replace("skills://vault/", "").strip("/")
                     try:
                         sid = validate_skill_id(raw_sid)
-                        target_dir = (manage_skills.VAULT_DIR / sid).resolve()
-                        if not target_dir.is_relative_to(manage_skills.VAULT_DIR.resolve()):
-                            content = f"[!] Acesso negado: Tentativa de Path Traversal detectada em '{raw_sid}'."
+                        src, _ = manage_skills.find_skill_source(sid)
+                        if src and (src / "SKILL.md").exists():
+                            content = (src / "SKILL.md").read_text(encoding="utf-8", errors="ignore")
                         else:
-                            md_path = target_dir / "SKILL.md"
-                            if md_path.exists():
-                                content = md_path.read_text(encoding="utf-8", errors="ignore")
-                            else:
-                                content = f"[!] Arquivo SKILL.md não encontrado no vault para '{sid}'."
+                            content = f"[!] Arquivo SKILL.md não encontrado para '{sid}' no catálogo."
                     except ValueError as ve:
                         content = f"[!] ID de skill inválido: {str(ve)}"
                 else:

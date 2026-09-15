@@ -23,15 +23,15 @@ CURRENT_WORKSPACE = None
 def _resolve_workspace_base() -> Path:
     if CURRENT_WORKSPACE:
         return CURRENT_WORKSPACE
+    cwd = Path.cwd()
+    if (cwd / ".git").exists() and cwd.resolve() != ROOT.resolve():
+        return cwd
     load_env()
     ws_env = os.environ.get("AGY_WORKSPACE") or os.environ.get("DEFAULT_WORKSPACE")
     if ws_env:
         p = Path(ws_env).resolve()
         if p.exists():
             return p
-    cwd = Path.cwd()
-    if (cwd / ".git").exists() and cwd.resolve() != ROOT.resolve():
-        return cwd
     return ROOT
 
 def _get_agent_folder_name(base: Path) -> str:
@@ -120,7 +120,30 @@ def get_manifest() -> dict:
     if not MANIFEST_PATH.exists():
         raise FileNotFoundError(f"skills_manifest.json ausente em: {MANIFEST_PATH}")
     with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
-        return {item["id"]: item for item in json.load(f)}
+        manifest = {item["id"]: item for item in json.load(f)}
+
+    # Auto-descoberta dinâmica de skills personalizadas em skills_custom/
+    custom_dirs = [ROOT / "skills_custom"]
+    active_dir = get_active_dir()
+    ws_custom = active_dir.parent.parent / "skills_custom"
+    if ws_custom.exists() and ws_custom.resolve() != (ROOT / "skills_custom").resolve():
+        custom_dirs.append(ws_custom)
+
+    for cdir in custom_dirs:
+        if cdir.exists():
+            for sdir in cdir.iterdir():
+                if sdir.is_dir() and (sdir / "SKILL.md").exists() and sdir.name not in manifest:
+                    manifest[sdir.name] = {
+                        "id": sdir.name,
+                        "title": sdir.name.replace("-", " ").title(),
+                        "category": "custom",
+                        "thematic_block": "custom",
+                        "description": f"Skill personalizada: {sdir.name}",
+                        "triggers": [sdir.name],
+                        "tech_stack": [sdir.name],
+                        "origin": "custom"
+                    }
+    return manifest
 
 def get_pinned() -> set[str]:
     pinned_path = get_pinned_file()
@@ -179,14 +202,14 @@ def remove_items_batch(paths: list[Path]):
         if sys.platform == "win32" and is_junction_or_link(path):
             try:
                 os.rmdir(path_str)
-                if not path.exists():
+                if not os.path.lexists(path_str):
                     continue
             except OSError:
                 pass
 
         try:
             os.unlink(path_str)
-            if not path.exists():
+            if not os.path.lexists(path_str):
                 continue
         except OSError:
             pass
@@ -348,11 +371,15 @@ def pin(ids: list[str]):
     manifest = get_manifest()
     pinned = get_pinned()
     valid_ids = [sid for sid in ids if sid in manifest]
-    for sid in valid_ids:
-        pinned.add(sid)
-    save_pinned(pinned)
-    add(valid_ids)
-    print(f"[PIN] Skills fixadas: {', '.join(valid_ids)}")
+    invalid_ids = [sid for sid in ids if sid not in manifest]
+    if invalid_ids:
+        print(f"[!] Skill(s) não encontrada(s) no catálogo: {', '.join(invalid_ids)}")
+    if valid_ids:
+        for sid in valid_ids:
+            pinned.add(sid)
+        save_pinned(pinned)
+        add(valid_ids)
+        print(f"[PIN] Skills fixadas: {', '.join(valid_ids)}")
 
 def unpin(ids: list[str]):
     pinned = get_pinned()

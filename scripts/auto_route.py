@@ -130,6 +130,20 @@ class BM25Index:
 
         non_generic_query = [t for t in query_tokens if t not in GENERIC_TERMS]
 
+        # Pré-computação de bônus de intenção e tiers fora do loop (0ms overhead)
+        intent_bonuses = {}
+        for intent_key, intent_data in INTENT_VERBS.items():
+            v_tokens = [normalize(v) for v in intent_data.get("verbs", [])]
+            if any(v in query_tokens for v in v_tokens):
+                for psid in intent_data.get("preferred_skills", []):
+                    b_score, b_intents = intent_bonuses.get(psid, (0.0, []))
+                    intent_bonuses[psid] = (b_score + 3.5, b_intents + [f"intent:{intent_key}"])
+
+        gold_skills = set(QUALITY_TIERS.get("gold", {}).get("skills", []))
+        silver_skills = set(QUALITY_TIERS.get("silver", {}).get("skills", []))
+        gold_mult = QUALITY_TIERS.get("gold", {}).get("multiplier", 1.35)
+        silver_mult = QUALITY_TIERS.get("silver", {}).get("multiplier", 1.15)
+
         scores = []
         for sid, meta in self.manifest.items():
             domain = meta.get("category") or meta.get("thematic_block")
@@ -176,24 +190,20 @@ class BM25Index:
                 score += 5.0
 
             # Bonus por Alinhamento de Verbo de Intenção
-            for intent_key, intent_data in INTENT_VERBS.items():
-                v_tokens = [normalize(v) for v in intent_data.get("verbs", [])]
-                if any(v in query_tokens for v in v_tokens):
-                    if sid in intent_data.get("preferred_skills", []):
-                        score += 3.5
-                        matched_terms.append(f"intent:{intent_key}")
+            if sid in intent_bonuses:
+                b_score, b_intents = intent_bonuses[sid]
+                score += b_score
+                matched_terms.extend(b_intents)
 
             if matched_terms and all(m in GENERIC_TERMS for m in matched_terms) and not non_generic_query:
                 score = 0.0
 
             if score > 0:
                 # Multiplicador por Nível Qualitativo (Quality Tier Boost)
-                gold_skills = set(QUALITY_TIERS.get("gold", {}).get("skills", []))
-                silver_skills = set(QUALITY_TIERS.get("silver", {}).get("skills", []))
                 if sid in gold_skills:
-                    score *= QUALITY_TIERS.get("gold", {}).get("multiplier", 1.35)
+                    score *= gold_mult
                 elif sid in silver_skills:
-                    score *= QUALITY_TIERS.get("silver", {}).get("multiplier", 1.15)
+                    score *= silver_mult
 
                 scores.append((round(score, 2), sid, matched_terms))
 
@@ -208,7 +218,9 @@ def get_index() -> BM25Index:
 
     m_mtime = MANIFEST_PATH.stat().st_mtime if MANIFEST_PATH.exists() else 0
     r_mtime = RULES_PATH.stat().st_mtime if RULES_PATH.exists() else 0
-    combined_mtime = (m_mtime, r_mtime)
+    c_path = ROOT / "skills_custom"
+    c_mtime = c_path.stat().st_mtime if c_path.exists() else 0
+    combined_mtime = (m_mtime, r_mtime, c_mtime)
 
     if _GLOBAL_INDEX is not None and _CACHED_MTIME == combined_mtime:
         return _GLOBAL_INDEX
@@ -640,7 +652,18 @@ if __name__ == "__main__":
             if idx + 1 < len(args):
                 top_k = int(args[idx + 1])
 
-        clean_args = [a for a in args if not a.startswith("--") and a not in (category, block, str(top_k))]
+        skip_next = False
+        clean_args = []
+        for i, a in enumerate(args):
+            if skip_next:
+                skip_next = False
+                continue
+            if a in ("--category", "--block", "--top-k"):
+                skip_next = True
+                continue
+            if a in ("--explain", "--plan", "--pre"):
+                continue
+            clean_args.append(a)
         prompt = " ".join(clean_args)
 
         if "--plan" in args or "--pre" in args:

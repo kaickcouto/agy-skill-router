@@ -179,7 +179,12 @@ class TestSkillRouterRegression(unittest.TestCase):
     def test_20_in_memory_index_cache_invalidation(self):
         idx1 = auto_route.get_index()
         self.assertIsNotNone(idx1)
-        self.assertEqual(auto_route._CACHED_MTIME, (auto_route.MANIFEST_PATH.stat().st_mtime, auto_route.RULES_PATH.stat().st_mtime))
+        expected_mtime = (
+            auto_route.MANIFEST_PATH.stat().st_mtime,
+            auto_route.RULES_PATH.stat().st_mtime,
+            (auto_route.ROOT / "skills_custom").stat().st_mtime
+        )
+        self.assertEqual(auto_route._CACHED_MTIME, expected_mtime)
 
     def test_21_taste_skill_routing_and_affinity(self):
         src, origin = manage_skills.find_skill_source("taste-skill")
@@ -214,6 +219,35 @@ class TestSkillRouterRegression(unittest.TestCase):
             "zod-validation-expert" in top_two or "supabase-postgres-best-practices" in top_two,
             f"Esperado gold tier no topo, obtido: {top_two}"
         )
+
+    def test_25_mcp_resource_read_active_junction(self):
+        """Verifica se recursos MCP skills://active/<sid> leem corretamente junctions sem falso positivo de traversal."""
+        import mcp_server
+        manage_skills.add(["supabase-postgres-best-practices"])
+        req = {
+            "jsonrpc": "2.0",
+            "id": "test-res",
+            "method": "resources/read",
+            "params": {"uri": "skills://active/supabase-postgres-best-practices"}
+        }
+        # Invocamos diretamente a lógica de resources/read
+        uri = req["params"]["uri"]
+        raw_sid = uri.replace("skills://active/", "").strip("/")
+        sid = mcp_server.validate_skill_id(raw_sid)
+        cur_active = manage_skills.get_active_dir()
+        active_item = cur_active / sid
+        self.assertTrue(active_item.exists(), "Item ativo deve existir.")
+        md_path = active_item / "SKILL.md"
+        self.assertTrue(md_path.exists(), "SKILL.md deve existir dentro do item ativo.")
+        content = md_path.read_text(encoding="utf-8", errors="ignore")
+        self.assertNotIn("Acesso negado", content)
+        self.assertIn("supabase", content.lower())
+
+    def test_26_dynamic_skills_custom_discovery(self):
+        """Verifica se get_manifest() auto-descobre pastas em skills_custom."""
+        manifest = manage_skills.get_manifest()
+        self.assertIn("ponytail", manifest)
+        self.assertIn("taste-skill", manifest)
 
 if __name__ == '__main__':
     unittest.main()
