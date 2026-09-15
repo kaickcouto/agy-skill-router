@@ -31827,5 +31827,27 @@
       "refatorar"
     ],
     "call_intent": "Injeta mindset de desenvolvedor sênior pragmático e minimalista, priorizando diffs mínimos, stdlib e rejeitando over-engineering."
+  },
+  {
+    "id": "taste-skill",
+    "target": "taste-skill",
+    "category": "frontend",
+    "thematic_block": "frontend",
+    "description": "Anti-slop frontend skill for landing pages, portfolios, UI components, and redesigns. Prevents generic AI defaults (purple gradients, generic glassmorphism, Inter + slate-900) by inferring design intent and applying disciplined typography, spacing, and micro-interactions.",
+    "triggers": [
+      "taste",
+      "anti-slop",
+      "design-taste",
+      "landing",
+      "landing-page",
+      "portfolio",
+      "redesign",
+      "ui-polish",
+      "estetica",
+      "visual-clean",
+      "minimalist-ui",
+      "modern-ui"
+    ],
+    "call_intent": "Injeta diretrizes anti-slop de design frontend para criar interfaces com visual profissional, moderno e não-genérico."
   }
 ]

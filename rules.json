@@ -44,7 +44,8 @@
     "brand-guidelines": ["marca", "identidade", "branding", "paleta", "cores", "padrao"],
     "doc-coauthoring": ["coautoria", "revisao", "editorial", "redigir", "co-autor"],
     "internal-comms": ["comunicacao", "comunicado", "anuncio", "newsletter", "memorando"],
-    "ponytail": ["ponytail", "yagni", "lazy", "minimalista", "simplificar", "enxuto", "bloat", "over-engineering"]
+    "ponytail": ["ponytail", "yagni", "lazy", "minimalista", "simplificar", "enxuto", "bloat", "over-engineering"],
+    "taste-skill": ["taste", "anti-slop", "design-taste", "estetica", "visual-clean", "landing", "portfolio", "redesign", "ui-polish"]
   },
   "skill_bundles": {
     "backend-fastapi-api": {
@@ -153,8 +154,9 @@
     "supabase": ["supabase-postgres-best-practices", "zod-validation-expert"],
     "python-fastapi-development": ["api-designer", "vitest-skill", "docker-expert"],
     "fastapi-router-py": ["python-fastapi-development", "api-designer"],
-    "frontend-design": ["tailwind-patterns", "react-component-performance"],
-    "tailwind-patterns": ["frontend-design", "react-component-performance"],
+    "frontend-design": ["tailwind-patterns", "taste-skill", "react-component-performance"],
+    "tailwind-patterns": ["frontend-design", "taste-skill", "react-component-performance"],
+    "taste-skill": ["frontend-design", "tailwind-patterns"],
     "webapp-testing": ["vitest-skill"],
     "vitest-skill": ["webapp-testing"],
     "xlsx": ["pdf"],
@@ -164,7 +166,7 @@
     "pdf", "xlsx", "docx", "pptx", "frontend-design", "webapp-testing",
     "mcp-builder", "canvas-design", "algorithmic-art", "brand-guidelines",
     "doc-coauthoring", "internal-comms", "slack-gif-creator", "theme-factory",
-    "web-artifacts-builder", "claude-api", "academy-guide", "ponytail"
+    "web-artifacts-builder", "claude-api", "academy-guide", "ponytail", "taste-skill"
   ],
   "blocked_domains_regex": [
     "(^|-)(marketing|copywriting|seo|affiliate|growth|funnel|dropship|influencer|viral|content-strategist|blogwriting)($|-)",

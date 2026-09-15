@@ -176,14 +176,19 @@ class TestSkillRouterRegression(unittest.TestCase):
         src, origin = manage_skills.find_skill_source("ponytail")
         self.assertIsNotNone(src, "Ponytail deve ser localizada pelo gerenciador de skills.")
         self.assertEqual(origin, "custom-router", "Ponytail deve vir de custom-router.")
-        self.assertTrue((src / "SKILL.md").exists(), "SKILL.md deve existir no diretorio da skill.")
-
     def test_20_in_memory_index_cache_invalidation(self):
-        # Verifica se get_index invalida cache em memoria quando mtime muda
         idx1 = auto_route.get_index()
         self.assertIsNotNone(idx1)
-        # Forca verificacao de mtime
         self.assertEqual(auto_route._CACHED_MTIME, (auto_route.MANIFEST_PATH.stat().st_mtime, auto_route.RULES_PATH.stat().st_mtime))
+
+    def test_21_taste_skill_routing_and_affinity(self):
+        src, origin = manage_skills.find_skill_source("taste-skill")
+        self.assertIsNotNone(src, "taste-skill deve ser localizada pelo gerenciador de skills.")
+        self.assertEqual(origin, "custom-router", "taste-skill deve vir de custom-router.")
+        self.assertTrue((src / "SKILL.md").exists(), "SKILL.md de taste-skill deve existir.")
+        # Verifica se taste-skill está presente na matriz de afinidade de frontend-design
+        companions = auto_route.SKILL_AFFINITY.get("frontend-design", [])
+        self.assertIn("taste-skill", companions, "taste-skill deve ser companion de frontend-design.")
 
 if __name__ == '__main__':
     unittest.main()
