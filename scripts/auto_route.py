@@ -35,9 +35,11 @@ MODULE_HINTS = {}
 PATH_TRIGGERS = {}
 BLOCK_KEYWORDS = {}
 SKILL_AFFINITY = {}
+QUALITY_TIERS = {}
+INTENT_VERBS = {}
 
 def load_rules():
-    global UNRELATED_FRAMEWORKS, GENERIC_TERMS, SYNONYMS, SKILL_BUNDLES, PRESETS, MODULE_HINTS, PATH_TRIGGERS, BLOCK_KEYWORDS, SKILL_AFFINITY
+    global UNRELATED_FRAMEWORKS, GENERIC_TERMS, SYNONYMS, SKILL_BUNDLES, PRESETS, MODULE_HINTS, PATH_TRIGGERS, BLOCK_KEYWORDS, SKILL_AFFINITY, QUALITY_TIERS, INTENT_VERBS
     if RULES_PATH.exists():
         try:
             with open(RULES_PATH, "r", encoding="utf-8") as f:
@@ -51,6 +53,8 @@ def load_rules():
                 PATH_TRIGGERS = data.get("path_triggers", {})
                 BLOCK_KEYWORDS = data.get("block_keywords", {})
                 SKILL_AFFINITY = data.get("skill_affinity", {})
+                QUALITY_TIERS = data.get("quality_tiers", {})
+                INTENT_VERBS = data.get("intent_verbs", {})
                 return
         except Exception:
             pass
@@ -171,10 +175,26 @@ class BM25Index:
             elif any(s in query_tokens for s in SYNONYMS.get(sid, [])):
                 score += 5.0
 
+            # Bonus por Alinhamento de Verbo de Intenção
+            for intent_key, intent_data in INTENT_VERBS.items():
+                v_tokens = [normalize(v) for v in intent_data.get("verbs", [])]
+                if any(v in query_tokens for v in v_tokens):
+                    if sid in intent_data.get("preferred_skills", []):
+                        score += 3.5
+                        matched_terms.append(f"intent:{intent_key}")
+
             if matched_terms and all(m in GENERIC_TERMS for m in matched_terms) and not non_generic_query:
                 score = 0.0
 
             if score > 0:
+                # Multiplicador por Nível Qualitativo (Quality Tier Boost)
+                gold_skills = set(QUALITY_TIERS.get("gold", {}).get("skills", []))
+                silver_skills = set(QUALITY_TIERS.get("silver", {}).get("skills", []))
+                if sid in gold_skills:
+                    score *= QUALITY_TIERS.get("gold", {}).get("multiplier", 1.35)
+                elif sid in silver_skills:
+                    score *= QUALITY_TIERS.get("silver", {}).get("multiplier", 1.15)
+
                 scores.append((round(score, 2), sid, matched_terms))
 
         scores.sort(key=lambda x: x[0], reverse=True)
@@ -381,13 +401,20 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
     results = index.score(prompt, category_filter=category, block_filter=block)
 
     # Desempate determinístico para skills semanticamente parecidas:
-    # Prioriza termos não-genéricos específicos e gatilhos explícitos
+    # Prioriza tiers qualitativos, alinhamento de intenção, termos não-genéricos específicos e gatilhos explícitos
+    gold_set = set(QUALITY_TIERS.get("gold", {}).get("skills", []))
+    silver_set = set(QUALITY_TIERS.get("silver", {}).get("skills", []))
+
     def disambiguation_key(item):
         score, sid, matches = item
         specific_matches = len([m for m in matches if m not in GENERIC_TERMS])
         meta = index.manifest.get(sid, {})
         trig_matches = sum(1 for t in meta.get("triggers", []) if any(normalize(m) in normalize(t) for m in matches))
-        return (score, specific_matches, trig_matches)
+        tier_weight = 2 if sid in gold_set else (1 if sid in silver_set else 0)
+        has_intent = 1 if any(m.startswith("intent:") for m in matches) else 0
+        return (round(score, 1), tier_weight, has_intent, trig_matches, specific_matches)
+
+    results.sort(key=disambiguation_key, reverse=True)
 
     def is_valid_selection(r):
         score, sid, matches = r
@@ -479,6 +506,7 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
         "confidence": round(confidence, 2),
         "threshold": threshold,
         "bundle": None,
+        "skills": selected_ids,
         "activated": activated,
         "pinned": list(pinned),
         "results": results[:5]

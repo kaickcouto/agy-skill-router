@@ -177,5 +177,57 @@
     "(^|-)(andruia|accint|xiaohongshu|wechat|douyin|taisly)($|-)",
     "azure-.*-(java|dotnet|csharp)",
     "-(java|dotnet|csharp)$"
-  ]
+  ],
+  "quality_tiers": {
+    "gold": {
+      "multiplier": 1.35,
+      "skills": [
+        "ponytail",
+        "taste-skill",
+        "supabase-postgres-best-practices",
+        "python-fastapi-development",
+        "tailwind-patterns",
+        "webapp-testing",
+        "vitest-skill",
+        "zod-validation-expert",
+        "xlsx",
+        "pdf"
+      ]
+    },
+    "silver": {
+      "multiplier": 1.15,
+      "skills": [
+        "supabase",
+        "api-designer",
+        "docker-expert",
+        "frontend-design",
+        "cloud-k8s",
+        "tanstack-query-expert",
+        "react-component-performance",
+        "mcp-builder"
+      ]
+    }
+  },
+  "intent_verbs": {
+    "refactor": {
+      "verbs": ["refatore", "refatorar", "simplifique", "simplificar", "enxugue", "enxugar", "limpar", "limpe", "yagni", "reduza", "reduzir"],
+      "preferred_skills": ["ponytail"]
+    },
+    "aesthetic_polish": {
+      "verbs": ["redesenhe", "redesenhar", "estetica", "beleza", "clean", "moderno", "modernizar", "bonito", "polir", "polimento", "anti-slop"],
+      "preferred_skills": ["taste-skill", "tailwind-patterns"]
+    },
+    "secure_audit": {
+      "verbs": ["audite", "auditar", "segurança", "seguranca", "politicas", "rls", "vulnerabilidade", "proteger"],
+      "preferred_skills": ["supabase-postgres-best-practices", "zod-validation-expert"]
+    },
+    "api_build": {
+      "verbs": ["endpoint", "endpoints", "rota", "rotas", "controller", "crud", "backend", "fastapi"],
+      "preferred_skills": ["python-fastapi-development", "api-designer"]
+    },
+    "testing_verify": {
+      "verbs": ["teste", "testar", "validar", "verificar", "e2e", "unitario", "cypress", "playwright", "vitest"],
+      "preferred_skills": ["webapp-testing", "vitest-skill"]
+    }
+  }
 }

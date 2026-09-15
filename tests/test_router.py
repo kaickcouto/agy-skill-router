@@ -190,5 +190,31 @@ class TestSkillRouterRegression(unittest.TestCase):
         companions = auto_route.SKILL_AFFINITY.get("frontend-design", [])
         self.assertIn("taste-skill", companions, "taste-skill deve ser companion de frontend-design.")
 
+    def test_22_intent_verb_refactor_routes_ponytail(self):
+        """Prompt com verbos de intenção de refatoração deve priorizar ponytail."""
+        res = auto_route.route("refatore e enxugue o código deste módulo", top_k=2)
+        self.assertEqual(res["status"], "routed")
+        self.assertIn("ponytail", res["skills"])
+
+    def test_23_intent_verb_aesthetic_routes_taste_skill(self):
+        """Prompt com verbos estéticos deve priorizar taste-skill sobre genéricos."""
+        res = auto_route.route("redesenhe a interface com estética moderna e clean anti-slop", top_k=2)
+        self.assertEqual(res["status"], "routed")
+        self.assertIn("taste-skill", res["skills"])
+
+    def test_24_quality_tier_ranking_boost(self):
+        """Skills de tier Gold devem receber boost qualitativo sobre skills comuns."""
+        index = auto_route.get_index()
+        results = index.score("audite a segurança e crie validação com zod")
+        skills_ranked = [r[1] for r in results]
+        self.assertTrue(len(skills_ranked) > 0)
+        # zod-validation-expert e supabase-postgres-best-practices são Gold
+        top_two = skills_ranked[:2]
+        self.assertTrue(
+            "zod-validation-expert" in top_two or "supabase-postgres-best-practices" in top_two,
+            f"Esperado gold tier no topo, obtido: {top_two}"
+        )
+
 if __name__ == '__main__':
     unittest.main()
+
