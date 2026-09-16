@@ -119,6 +119,16 @@ def load_env():
     if ROUTER_ENV_PATH.exists():
         _parse_env_file(ROUTER_ENV_PATH)
 
+CACHE_FILE = ROOT / ".agent" / "index_cache.pkl"
+
+def invalidate_cache():
+    """Invalida o cache do índice BM25 quando novas skills forem adicionadas ou modificadas."""
+    if CACHE_FILE.exists():
+        CACHE_FILE.unlink(missing_ok=True)
+    legacy_cache = ROOT / ".cache"
+    if legacy_cache.exists():
+        shutil.rmtree(legacy_cache, ignore_errors=True)
+
 def get_manifest() -> dict:
     if not MANIFEST_PATH.exists():
         raise FileNotFoundError(f"skills_manifest.json ausente em: {MANIFEST_PATH}")
@@ -136,13 +146,27 @@ def get_manifest() -> dict:
         if cdir.exists():
             for sdir in cdir.iterdir():
                 if sdir.is_dir() and (sdir / "SKILL.md").exists() and sdir.name not in manifest:
+                    # Extrai descrição real do frontmatter YAML se presente
+                    custom_desc = f"Skill personalizada: {sdir.name}"
+                    custom_triggers = [sdir.name]
+                    try:
+                        content = (sdir / "SKILL.md").read_text(encoding="utf-8", errors="ignore")
+                        fm_match = re.search(r'^---\r?\n(.*?)\r?\n---', content, re.DOTALL)
+                        if fm_match:
+                            fm_text = fm_match.group(1)
+                            desc_match = re.search(r'^description:\s*(?:[>|]-?\s*)?(.*?)(?=(?:\r?\n[a-z0-9_\-]+:|\Z))', fm_text, re.DOTALL | re.MULTILINE)
+                            if desc_match and desc_match.group(1).strip():
+                                custom_desc = re.sub(r'\s+', ' ', desc_match.group(1)).strip().strip('"\'')
+                    except Exception:
+                        pass
+
                     manifest[sdir.name] = {
                         "id": sdir.name,
                         "title": sdir.name.replace("-", " ").title(),
                         "category": "custom",
                         "thematic_block": "custom",
-                        "description": f"Skill personalizada: {sdir.name}",
-                        "triggers": [sdir.name],
+                        "description": custom_desc,
+                        "triggers": custom_triggers,
                         "tech_stack": [sdir.name],
                         "origin": "custom"
                     }
@@ -466,9 +490,7 @@ description: {desc}
 - Não introduza dependências externas desnecessárias.
 """
     target_file.write_text(template, encoding="utf-8")
-    cache_dir = ROOT / ".cache"
-    if cache_dir.exists():
-        shutil.rmtree(cache_dir, ignore_errors=True)
+    invalidate_cache()
 
     print(f"[+] Skill '{clean_name}' inicializada com sucesso!")
     print(f"    Local: {target_file}")
@@ -661,9 +683,7 @@ def import_skill(spec: str, skill_folder: str = None, as_name: str = None) -> bo
     print(f"[+] SKILL.md baixado de: {successful_url}")
     print(f"[+] Salvo em: {target_file}")
 
-    cache_dir = ROOT / ".cache"
-    if cache_dir.exists():
-        shutil.rmtree(cache_dir, ignore_errors=True)
+    invalidate_cache()
 
     lint_skill(target_name)
     return True

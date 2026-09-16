@@ -216,6 +216,11 @@ TOOLS_DEFINITIONS = [
                     "description": "Se verdadeiro, ativa automaticamente as skills recomendadas em .agent/skills/. Padrão: true.",
                     "default": True
                 },
+                "top_k": {
+                    "type": "integer",
+                    "description": "Número máximo de skills a ativar (padrão: 3).",
+                    "default": 3
+                },
                 "workspace_dir": {
                     "type": "string",
                     "description": "Caminho opcional do projeto alvo."
@@ -447,9 +452,10 @@ def handle_pre_agent_plan(arguments: dict) -> dict:
         raise ValueError("task é obrigatório.")
     img = arguments.get("image_path")
     auto_route = bool(arguments.get("auto_route_skills", True))
+    top_k = safe_int(arguments.get("top_k"), default=3, min_val=1, max_val=6)
     ws = arguments.get("workspace_dir")
     with scoped_workspace(ws):
-        res = pre_agent.pre_agent_decompose(task, image_path=img, auto_route_skills=auto_route)
+        res = pre_agent.pre_agent_decompose(task, image_path=img, auto_route_skills=auto_route, top_k=top_k)
         return {
             "content": [
                 {

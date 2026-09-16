@@ -213,13 +213,24 @@ class BM25Index:
 _GLOBAL_INDEX = None
 _CACHED_MTIME = None
 
+def _get_custom_mtime() -> float:
+    c_path = ROOT / "skills_custom"
+    if not c_path.exists():
+        return 0.0
+    mtimes = [c_path.stat().st_mtime]
+    for skill_file in c_path.glob("*/SKILL.md"):
+        try:
+            mtimes.append(skill_file.stat().st_mtime)
+        except OSError:
+            pass
+    return max(mtimes)
+
 def get_index() -> BM25Index:
     global _GLOBAL_INDEX, _CACHED_MTIME
 
     m_mtime = MANIFEST_PATH.stat().st_mtime if MANIFEST_PATH.exists() else 0
     r_mtime = RULES_PATH.stat().st_mtime if RULES_PATH.exists() else 0
-    c_path = ROOT / "skills_custom"
-    c_mtime = c_path.stat().st_mtime if c_path.exists() else 0
+    c_mtime = _get_custom_mtime()
     combined_mtime = (m_mtime, r_mtime, c_mtime)
 
     if _GLOBAL_INDEX is not None and _CACHED_MTIME == combined_mtime:
