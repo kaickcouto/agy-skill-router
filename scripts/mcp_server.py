@@ -227,6 +227,23 @@ TOOLS_DEFINITIONS = [
             "destructiveHint": False,
             "openWorldHint": True
         }
+    },
+    {
+        "name": "lint_skill",
+        "description": "Inspeciona e audita uma skill técnica, validando frontmatter YAML, integridade sintática, orçamento de contexto (KB) e ausência de tells de IA.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "skill_id": {
+                    "type": "string",
+                    "description": "ID ou nome da skill a ser auditada (ex: 'taste-skill', 'ponytail')."
+                }
+            },
+            "required": ["skill_id"]
+        },
+        "annotations": {
+            "readOnlyHint": True
+        }
     }
 ]
 
@@ -442,6 +459,18 @@ def handle_pre_agent_plan(arguments: dict) -> dict:
             ]
         }
 
+def handle_lint_skill(arguments: dict) -> dict:
+    sid = validate_skill_id(arguments.get("skill_id"))
+    stdout_text, ok = capture_execution(manage_skills.lint_skill, sid)
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": stdout_text
+            }
+        ]
+    }
+
 TOOL_HANDLERS = {
     "route_skills": handle_route_skills,
     "list_skills": handle_list_skills,
@@ -452,6 +481,7 @@ TOOL_HANDLERS = {
     "skill_info": handle_skill_info,
     "apply_preset": handle_apply_preset,
     "pre_agent_plan": handle_pre_agent_plan,
+    "lint_skill": handle_lint_skill,
 }
 
 def send_json(data: dict):

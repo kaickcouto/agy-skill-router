@@ -426,8 +426,8 @@ def list_skills() -> list[str]:
 
 def init_skill(name: str, description: str = None) -> Path | None:
     """Scaffolds a new specialized skill in skills_custom/<name>/SKILL.md."""
-    clean_name = name.strip().lower()
-    if not re.match(r'^[a-z0-9_\-]+$', clean_name):
+    clean_name = re.sub(r'[^a-zA-Z0-9_\-]+', '-', name.strip().lower()).strip('-')
+    if not clean_name:
         print(f"[!] Nome de skill inválido: '{name}'. Use apenas letras minúsculas, números, hífens e underscores.")
         return None
 
@@ -503,7 +503,7 @@ def lint_skill(target: str) -> bool:
     issues = 0
     warnings = 0
 
-    # 1. Frontmatter YAML
+    # 1. Frontmatter YAML (com suporte a multilinhas >- ou |)
     fm_match = re.search(r'^---\r?\n(.*?)\r?\n---', content, re.DOTALL)
     if not fm_match:
         print(" ❌ [ERRO] Frontmatter YAML ausente no início do arquivo (delimitadores ---).")
@@ -511,7 +511,7 @@ def lint_skill(target: str) -> bool:
     else:
         fm_text = fm_match.group(1)
         has_name = bool(re.search(r'^name:\s*.+', fm_text, re.MULTILINE))
-        desc_match = re.search(r'^description:\s*(.+)', fm_text, re.MULTILINE)
+        desc_match = re.search(r'^description:\s*(?:[>|]-?\s*)?(.*?)(?=(?:\r?\n[a-z0-9_\-]+:|\Z))', fm_text, re.DOTALL | re.MULTILINE)
 
         if has_name:
             print(" ✅ [OK] Campo 'name' presente no frontmatter.")
@@ -519,8 +519,8 @@ def lint_skill(target: str) -> bool:
             print(" ❌ [ERRO] Campo 'name' ausente no frontmatter.")
             issues += 1
 
-        if desc_match:
-            desc_val = desc_match.group(1).strip()
+        if desc_match and desc_match.group(1).strip():
+            desc_val = re.sub(r'\s+', ' ', desc_match.group(1)).strip().strip('"\'')
             if len(desc_val) >= 20:
                 print(f" ✅ [OK] Campo 'description' descritivo ({len(desc_val)} caracteres).")
             else:
@@ -568,25 +568,36 @@ def _parse_github_spec(spec: str, skill_folder: str = None) -> tuple[str, str, s
     """Extrai (owner, repo, subpath, skill_name) a partir de spec ou URL."""
     spec = spec.strip().rstrip("/")
     if "github.com/" in spec:
-        match = re.search(r'github\.com/([^/]+)/([^/]+)(?:/tree/[^/]+/(.+))?', spec)
+        match = re.search(r'github\.com/([^/]+)/([^/]+)(?:/(?:tree|blob)/[^/]+/(.+))?', spec)
         if match:
-            owner, repo, subpath = match.group(1), match.group(2), match.group(3) or ""
+            owner, repo, raw_subpath = match.group(1), match.group(2), match.group(3) or ""
             repo = repo.replace(".git", "")
-            if skill_folder:
-                subpath = skill_folder
+            subpath = skill_folder or raw_subpath
+            if subpath.endswith("/SKILL.md"):
+                subpath = subpath[:-9]
+            elif subpath.lower() == "skill.md":
+                subpath = ""
             skill_name = Path(subpath).name if subpath else repo
             return owner, repo, subpath, skill_name
 
     if "@" in spec:
         base, subpath = spec.split("@", 1)
         owner, repo = base.strip().split("/", 1)
-        skill_name = Path(subpath).name
+        if subpath.endswith("/SKILL.md"):
+            subpath = subpath[:-9]
+        elif subpath.lower() == "skill.md":
+            subpath = ""
+        skill_name = Path(subpath).name if subpath else repo
         return owner, repo, subpath, skill_name
 
     if "/" in spec:
         parts = spec.split("/", 1)
         owner, repo = parts[0], parts[1]
         subpath = skill_folder or ""
+        if subpath.endswith("/SKILL.md"):
+            subpath = subpath[:-9]
+        elif subpath.lower() == "skill.md":
+            subpath = ""
         skill_name = Path(subpath).name if subpath else repo
         return owner, repo, subpath, skill_name
 
