@@ -1,8 +1,11 @@
 import os
 import sys
+import re
 import json
 import shutil
 import stat
+import urllib.request
+import urllib.error
 from pathlib import Path
 
 # Suporte a UTF-8 no Windows
@@ -421,9 +424,242 @@ def list_skills() -> list[str]:
         print(f"  * {name}{tag_str}")
     return active
 
+def init_skill(name: str, description: str = None) -> Path | None:
+    """Scaffolds a new specialized skill in skills_custom/<name>/SKILL.md."""
+    clean_name = name.strip().lower()
+    if not re.match(r'^[a-z0-9_\-]+$', clean_name):
+        print(f"[!] Nome de skill inválido: '{name}'. Use apenas letras minúsculas, números, hífens e underscores.")
+        return None
+
+    target_dir = ROOT / "skills_custom" / clean_name
+    target_file = target_dir / "SKILL.md"
+    if target_file.exists():
+        print(f"[!] A skill '{clean_name}' já existe em: {target_dir}")
+        return target_file
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+    desc = description.strip() if description else f"Diretrizes técnicas e padrões especializados para {clean_name}."
+
+    template = f"""---
+name: {clean_name}
+description: {desc}
+---
+
+# {clean_name.replace('-', ' ').title()}
+
+## Quando Ativar Esta Skill
+- Use quando a tarefa envolver {clean_name}.
+- Acione para implementação, refatoração ou auditoria deste domínio.
+
+## Diretrizes de Engenharia & Boas Práticas
+1. Siga a Escada de Decisão do Ponytail (YAGNI, menor diff funcional).
+2. Priorize recursos nativos da plataforma e bibliotecas já instaladas.
+3. Garanta validação estrita nas fronteiras e testes automatizados.
+
+## Exemplos Canônicos
+```typescript
+// Implementação padrão de referência
+```
+
+## Anti-Padrões Proibidos
+- Não crie abstrações prematuras de uso único.
+- Não introduza dependências externas desnecessárias.
+"""
+    target_file.write_text(template, encoding="utf-8")
+    cache_dir = ROOT / ".cache"
+    if cache_dir.exists():
+        shutil.rmtree(cache_dir, ignore_errors=True)
+
+    print(f"[+] Skill '{clean_name}' inicializada com sucesso!")
+    print(f"    Local: {target_file}")
+    return target_file
+
+def lint_skill(target: str) -> bool:
+    """Valida frontmatter YAML, integridade técnica e tamanho de uma skill."""
+    clean_target = target.strip()
+    src, origin = find_skill_source(clean_target)
+
+    p = Path(clean_target)
+    if p.is_file():
+        skill_file = p
+        skill_name = p.parent.name
+    elif p.is_dir() and (p / "SKILL.md").exists():
+        skill_file = p / "SKILL.md"
+        skill_name = p.name
+    elif src and (src / "SKILL.md").exists():
+        skill_file = src / "SKILL.md"
+        skill_name = clean_target
+    else:
+        print(f"[X] Skill ou arquivo SKILL.md não encontrado para: '{clean_target}'")
+        return False
+
+    content = skill_file.read_text(encoding="utf-8", errors="ignore")
+    size_bytes = len(content.encode("utf-8"))
+    size_kb = size_bytes / 1024.0
+
+    print(f"\n📋 LINT REPORT: {skill_name} ({skill_file})")
+    print("-" * 65)
+
+    issues = 0
+    warnings = 0
+
+    # 1. Frontmatter YAML
+    fm_match = re.search(r'^---\r?\n(.*?)\r?\n---', content, re.DOTALL)
+    if not fm_match:
+        print(" ❌ [ERRO] Frontmatter YAML ausente no início do arquivo (delimitadores ---).")
+        issues += 1
+    else:
+        fm_text = fm_match.group(1)
+        has_name = bool(re.search(r'^name:\s*.+', fm_text, re.MULTILINE))
+        desc_match = re.search(r'^description:\s*(.+)', fm_text, re.MULTILINE)
+
+        if has_name:
+            print(" ✅ [OK] Campo 'name' presente no frontmatter.")
+        else:
+            print(" ❌ [ERRO] Campo 'name' ausente no frontmatter.")
+            issues += 1
+
+        if desc_match:
+            desc_val = desc_match.group(1).strip()
+            if len(desc_val) >= 20:
+                print(f" ✅ [OK] Campo 'description' descritivo ({len(desc_val)} caracteres).")
+            else:
+                print(f" ⚠️ [AVISO] 'description' muito curta ({len(desc_val)} chars). Recomendado >= 20 para BM25.")
+                warnings += 1
+        else:
+            print(" ❌ [ERRO] Campo 'description' ausente no frontmatter.")
+            issues += 1
+
+    # 2. Orçamento de Contexto & Tamanho
+    if size_kb <= 50:
+        print(f" ✅ [OK] Tamanho ideal para contexto ({size_kb:.1f} KB <= 50 KB).")
+    elif size_kb <= 90:
+        print(f" ⚠️ [AVISO] Tamanho moderado ({size_kb:.1f} KB). Mantenha conciso para economizar tokens.")
+        warnings += 1
+    else:
+        print(f" ❌ [ERRO] Tamanho excessivo ({size_kb:.1f} KB > 90 KB). Risco de saturar a janela de contexto.")
+        issues += 1
+
+    # 3. Em-dashes proibidos (Anti-tell)
+    em_dashes = len(re.findall(r'[—–]', content))
+    if em_dashes == 0:
+        print(" ✅ [OK] Zero travessões longos (em-dash / en-dash).")
+    else:
+        print(f" ⚠️ [AVISO] Detectados {em_dashes} travessões em-dash/en-dash ('—'/'–'). Use hífens normais ('-').")
+        warnings += 1
+
+    # 4. Blocos de Código Markdown
+    fences = len(re.findall(r'^```', content, re.MULTILINE))
+    if fences % 2 == 0:
+        print(" ✅ [OK] Blocos de código markdown devidamente balanceados.")
+    else:
+        print(f" ❌ [ERRO] Blocos de código não balanceados ({fences} marcadores ``` encontrados).")
+        issues += 1
+
+    print("-" * 65)
+    if issues == 0:
+        print(f" 🎉 RESULTADO: APROVADO! ({warnings} avisos)")
+        return True
+    else:
+        print(f" 🚫 RESULTADO: REPROVADO ({issues} erros, {warnings} avisos).")
+        return False
+
+def _parse_github_spec(spec: str, skill_folder: str = None) -> tuple[str, str, str, str]:
+    """Extrai (owner, repo, subpath, skill_name) a partir de spec ou URL."""
+    spec = spec.strip().rstrip("/")
+    if "github.com/" in spec:
+        match = re.search(r'github\.com/([^/]+)/([^/]+)(?:/tree/[^/]+/(.+))?', spec)
+        if match:
+            owner, repo, subpath = match.group(1), match.group(2), match.group(3) or ""
+            repo = repo.replace(".git", "")
+            if skill_folder:
+                subpath = skill_folder
+            skill_name = Path(subpath).name if subpath else repo
+            return owner, repo, subpath, skill_name
+
+    if "@" in spec:
+        base, subpath = spec.split("@", 1)
+        owner, repo = base.strip().split("/", 1)
+        skill_name = Path(subpath).name
+        return owner, repo, subpath, skill_name
+
+    if "/" in spec:
+        parts = spec.split("/", 1)
+        owner, repo = parts[0], parts[1]
+        subpath = skill_folder or ""
+        skill_name = Path(subpath).name if subpath else repo
+        return owner, repo, subpath, skill_name
+
+    raise ValueError(f"Formato inválido: '{spec}'. Use 'owner/repo' ou 'owner/repo@subpasta'.")
+
+def import_skill(spec: str, skill_folder: str = None, as_name: str = None) -> bool:
+    """Importa uma skill de um repositório GitHub diretamente para skills_custom/."""
+    try:
+        owner, repo, subpath, default_name = _parse_github_spec(spec, skill_folder)
+    except Exception as e:
+        print(f"[!] Erro ao interpretar repositório: {e}")
+        return False
+
+    target_name = as_name or default_name
+    target_name = re.sub(r'[^a-zA-Z0-9_\-]', '-', target_name).lower()
+    target_dir = ROOT / "skills_custom" / target_name
+    target_file = target_dir / "SKILL.md"
+
+    print(f"[*] Importando skill de GitHub: {owner}/{repo}" + (f" (pasta: {subpath})" if subpath else "") + "...")
+
+    branches = ["main", "master"]
+    candidate_paths = []
+    if subpath:
+        sub_clean = subpath.strip("/")
+        candidate_paths.extend([
+            f"{sub_clean}/SKILL.md",
+            f"skills/{sub_clean}/SKILL.md"
+        ])
+    else:
+        candidate_paths.extend([
+            "SKILL.md",
+            f"skills/{repo}/SKILL.md",
+            f"{repo}/SKILL.md"
+        ])
+
+    downloaded_content = None
+    successful_url = None
+
+    for b in branches:
+        for p in candidate_paths:
+            url = f"https://raw.githubusercontent.com/{owner}/{repo}/{b}/{p}"
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "agy-skill-router/1.0"})
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    if resp.status == 200:
+                        downloaded_content = resp.read().decode("utf-8", errors="ignore")
+                        successful_url = url
+                        break
+            except Exception:
+                continue
+        if downloaded_content:
+            break
+
+    if not downloaded_content:
+        print(f"[X] Não foi possível localizar SKILL.md em '{owner}/{repo}'.")
+        print(f"    Tentados caminhos: {', '.join(candidate_paths)} nas branches main/master.")
+        return False
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_file.write_text(downloaded_content, encoding="utf-8")
+    print(f"[+] SKILL.md baixado de: {successful_url}")
+    print(f"[+] Salvo em: {target_file}")
+
+    cache_dir = ROOT / ".cache"
+    if cache_dir.exists():
+        shutil.rmtree(cache_dir, ignore_errors=True)
+
+    lint_skill(target_name)
+    return True
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Uso: python scripts/manage_skills.py [add|remove|reset|list|pin|unpin] [args...]")
+        print("Uso: python scripts/manage_skills.py [add|remove|reset|list|pin|unpin|init|lint|import] [args...]")
         sys.exit(0)
 
     cmd = sys.argv[1].lower()
@@ -442,5 +678,33 @@ if __name__ == "__main__":
         pin(args)
     elif cmd == "unpin":
         unpin(args)
+    elif cmd == "init":
+        if not args:
+            print("Uso: python scripts/manage_skills.py init <nome-da-skill> [descrição]")
+        else:
+            name = args[0]
+            desc = " ".join(args[1:]) if len(args) > 1 else None
+            init_skill(name, desc)
+    elif cmd == "lint":
+        if not args:
+            print("Uso: python scripts/manage_skills.py lint <nome-da-skill>")
+        else:
+            lint_skill(args[0])
+    elif cmd == "import":
+        if not args:
+            print("Uso: python scripts/manage_skills.py import <owner/repo[@subpasta]> [--skill subpasta] [--name nome]")
+        else:
+            spec = args[0]
+            sub = None
+            as_n = None
+            if "--skill" in args:
+                idx = args.index("--skill")
+                if idx + 1 < len(args):
+                    sub = args[idx + 1]
+            if "--name" in args:
+                idx = args.index("--name")
+                if idx + 1 < len(args):
+                    as_n = args[idx + 1]
+            import_skill(spec, skill_folder=sub, as_name=as_n)
     else:
         print(f"[!] Comando inválido: {cmd}")

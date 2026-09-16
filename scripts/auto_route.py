@@ -22,7 +22,7 @@ CACHE_FILE = ROOT / ".agent" / "index_cache.pkl"
 MANIFEST_PATH = ROOT / "skills_manifest.json"
 
 sys.path.insert(0, str(SCRIPT_DIR))
-from manage_skills import add, reset, list_skills, pin, unpin, get_pinned, get_manifest
+from manage_skills import add, reset, list_skills, pin, unpin, get_pinned, get_manifest, init_skill, lint_skill, import_skill
 
 RULES_PATH = ROOT / "rules.json"
 
@@ -586,6 +586,9 @@ if __name__ == "__main__":
         print("  python scripts/auto_route.py preset <nome|list>")
         print("  python scripts/auto_route.py pin <id1> [id2...]")
         print("  python scripts/auto_route.py unpin <id1> [id2...]")
+        print("  python scripts/auto_route.py init <nome> [descrição]")
+        print("  python scripts/auto_route.py lint <nome|caminho>")
+        print("  python scripts/auto_route.py import <owner/repo[@subpasta]> [--skill pasta] [--name nome]")
         print("  python scripts/auto_route.py status")
         print("  python scripts/auto_route.py reset")
         sys.exit(0)
@@ -619,6 +622,32 @@ if __name__ == "__main__":
         pin(args[1:])
     elif cmd == "unpin":
         unpin(args[1:])
+    elif cmd == "init":
+        if len(args) > 1:
+            init_skill(args[1], " ".join(args[2:]) if len(args) > 2 else None)
+        else:
+            print("Uso: python scripts/auto_route.py init <nome-da-skill> [descrição]")
+    elif cmd == "lint":
+        if len(args) > 1:
+            lint_skill(args[1])
+        else:
+            print("Uso: python scripts/auto_route.py lint <nome-da-skill>")
+    elif cmd == "import":
+        if len(args) > 1:
+            spec = args[1]
+            sub = None
+            as_n = None
+            if "--skill" in args:
+                idx = args.index("--skill")
+                if idx + 1 < len(args):
+                    sub = args[idx + 1]
+            if "--name" in args:
+                idx = args.index("--name")
+                if idx + 1 < len(args):
+                    as_n = args[idx + 1]
+            import_skill(spec, skill_folder=sub, as_name=as_n)
+        else:
+            print("Uso: python scripts/auto_route.py import <owner/repo[@subpasta]> [--skill subpasta] [--name nome]")
     elif cmd == "search":
         q = args[1] if len(args) > 1 and not args[1].startswith("--") else ""
         cat = None

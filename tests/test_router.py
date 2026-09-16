@@ -249,6 +249,29 @@ class TestSkillRouterRegression(unittest.TestCase):
         self.assertIn("ponytail", manifest)
         self.assertIn("taste-skill", manifest)
 
+    def test_27_init_and_lint_skill(self):
+        """Verifica scaffolding e linting de novas skills."""
+        import shutil
+        dummy_name = "test-scaffold-skill"
+        dummy_dir = auto_route.ROOT / "skills_custom" / dummy_name
+        try:
+            skill_file = manage_skills.init_skill(dummy_name, "Skill de teste para validacao de scaffolding.")
+            self.assertIsNotNone(skill_file)
+            self.assertTrue(skill_file.exists())
+            # Lint deve aprovar a skill gerada pelo template
+            passed = manage_skills.lint_skill(dummy_name)
+            self.assertTrue(passed)
+
+            # Teste de parsing do GitHub spec
+            o, r, sub, name = manage_skills._parse_github_spec("vercel-labs/skills@find-skills")
+            self.assertEqual(o, "vercel-labs")
+            self.assertEqual(r, "skills")
+            self.assertEqual(sub, "find-skills")
+            self.assertEqual(name, "find-skills")
+        finally:
+            if dummy_dir.exists():
+                shutil.rmtree(dummy_dir, ignore_errors=True)
+
 if __name__ == '__main__':
     unittest.main()
 
