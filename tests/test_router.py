@@ -280,6 +280,9 @@ class TestSkillRouterRegression(unittest.TestCase):
         res_debug = auto_route.route("preciso debugar e investigar esse erro que está quebrando o sistema", top_k=2)
         self.assertIn("diagnosing-bugs", res_debug["skills"])
 
+        res_design = auto_route.route("preciso desacoplar e modularizar a interface deste modulo criando deep modules", top_k=2)
+        self.assertIn("codebase-design", res_design["skills"])
+
 if __name__ == '__main__':
     unittest.main()
 

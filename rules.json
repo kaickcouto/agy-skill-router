@@ -157,6 +157,8 @@
     "frontend-design": ["tailwind-patterns", "taste-skill", "react-component-performance"],
     "tailwind-patterns": ["frontend-design", "taste-skill", "react-component-performance"],
     "taste-skill": ["frontend-design", "tailwind-patterns"],
+    "codebase-design": ["ponytail", "python-fastapi-development", "api-designer", "frontend-design"],
+    "ponytail": ["codebase-design"],
     "webapp-testing": ["vitest-skill", "tdd"],
     "vitest-skill": ["webapp-testing", "tdd"],
     "tdd": ["webapp-testing", "vitest-skill"],
@@ -169,7 +171,7 @@
     "mcp-builder", "canvas-design", "algorithmic-art", "brand-guidelines",
     "doc-coauthoring", "internal-comms", "slack-gif-creator", "theme-factory",
     "web-artifacts-builder", "claude-api", "academy-guide", "ponytail", "taste-skill",
-    "tdd", "diagnosing-bugs"
+    "tdd", "diagnosing-bugs", "codebase-design"
   ],
   "blocked_domains_regex": [
     "(^|-)(marketing|copywriting|seo|affiliate|growth|funnel|dropship|influencer|viral|content-strategist|blogwriting)($|-)",
@@ -189,6 +191,7 @@
         "taste-skill",
         "tdd",
         "diagnosing-bugs",
+        "codebase-design",
         "supabase-postgres-best-practices",
         "python-fastapi-development",
         "tailwind-patterns",
@@ -237,6 +240,10 @@
     "diagnose_debug": {
       "verbs": ["diagnosticar", "diagnostique", "debugar", "debug", "investigar", "investigue", "erro", "quebrando", "falhando", "lento", "regression"],
       "preferred_skills": ["diagnosing-bugs", "webapp-testing"]
+    },
+    "modular_design": {
+      "verbs": ["modularizar", "modular", "acoplamento", "desacoplar", "interface", "deep module", "seam", "arquitetura", "camadas", "coesao", "coesão"],
+      "preferred_skills": ["codebase-design", "ponytail"]
     }
   }
 }
