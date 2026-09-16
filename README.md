@@ -2,7 +2,7 @@
 
 Roteador dinâmico de habilidades técnicas sob demanda desenvolvido sob medida para o **Google Antigravity (AGY)**.
 
-Projetado para eliminar o consumo excessivo de tokens: mantém **1.312 skills especializadas** repousando no Vault (custo zero de contexto) e injeta cirurgicamente apenas as 1–2 skills necessárias via **Windows Directory Junctions / Symlinks (0ms)**, com auto-limpeza após cada tarefa.
+Projetado para eliminar o consumo excessivo de tokens: mantém **1.314+ skills especializadas** repousando no Vault e Custom (custo zero de contexto) e injeta cirurgicamente apenas as 1–2 skills necessárias via **Windows Directory Junctions / Symlinks (0ms)**, com auto-limpeza após cada tarefa.
 
 ---
 
@@ -15,8 +15,8 @@ Projetado para eliminar o consumo excessivo de tokens: mantém **1.312 skills es
                                       │ (< 3ms)
                                       ▼
                        ┌──────────────────────────────┐
-                       │       SKILLS VAULT           │
-                       │    (1.312 skills em repouso) │
+                       │   SKILLS VAULT & CUSTOM      │
+                       │ (1.314+ skills em repouso)   │
                        └──────────────┬───────────────┘
                                       │
                          [NTFS Junction / Symlink]
@@ -28,7 +28,8 @@ Projetado para eliminar o consumo excessivo de tokens: mantém **1.312 skills es
     │  .agent/skills/                                                 │
     │  ├── [NATIVA]   minhas-skills-locais/  (NUNCA DELETADAS)        │
     │  ├── [ROUTER]   supabase-postgres/ ────► (Junction temporária)  │
-    │  └── [PINNED]   tailwind-patterns/ ────► (Junction fixada)      │
+    │  ├── [PINNED]   tailwind-patterns/ ────► (Junction fixada)      │
+    │  └── [CUSTOM]   taste-skill, tdd/  ────► (Junction prioritária) │
     │                                                                 │
     │  .agent/.router_session.json ──► (Rastreio de Posse da Sessão) │
     └─────────────────────────────────┬───────────────────────────────┘
@@ -46,25 +47,23 @@ Projetado para eliminar o consumo excessivo de tokens: mantém **1.312 skills es
 
 ## ⚡ Principais Recursos & Blindagem de Engenharia
 
-- **Economia Máxima de Contexto (99.85%)**: As 1.312 skills ficam no vault. O contexto do agente recebe apenas as instruções exatas da demanda em execução.
+- **Economia Máxima de Contexto (99.85%)**: As 1.314+ skills ficam em repouso. O contexto do agente recebe apenas as instruções exatas da demanda em execução.
+- **Skills de Engenharia Ouro (Matt Pocock & Anti-Slop)**:
+  - `taste-skill`: Design frontend moderno anti-slop, micro-interações refinadas e leitura de contexto de UI.
+  - `ponytail`: Mindset sênior pragmático e YAGNI (menor diff funcional possível).
+  - `codebase-design`: Arquitetura de módulos profundos (*deep modules*), costuras limpas (*seams*) e desacoplamento.
+  - `tdd`: Ciclo rigoroso *Red-Green-Refactor* sem testes tautológicos ou mocks excessivos.
+  - `diagnosing-bugs`: Isolamento de bugs com reprodução mínima (MRE) e redação estrita de segredos (`<REDACTED>`).
+- **Ciclo de Vida Completo de Skills (`init`, `lint`, `import`)**:
+  - Scaffolding de novas skills (`init`), auditoria estática rigorosa de tokens/YAML (`lint`) e importação direta do GitHub (`import`).
 - **Git-Aware Context Routing (estilo Aider)**: Inspeciona silenciosamente o `git status` do workspace ativo para inferir o contexto das tecnologias modificadas quando a solicitação do usuário for curta ou vaga.
 - **Path-Triggered Context (estilo Cursor)**: Mapeamento de arquivos e extensões mencionadas no prompt (ex: `migrations.sql`, `routes.py`, `App.tsx`, `Dockerfile`) para acionamento instantâneo das skills especializadas correspondentes.
 - **Two-Tier Domain Classification**: Classificação prévia por blocos temáticos (`database`, `backend`, `frontend`, `testing`, `data-ai`) que isola o espaço de busca, eliminando totalmente ruídos e falsos positivos cruzados.
 - **Skill Co-occurrence & Affinity Matrix**: Priorização contextual inteligente de skills irmãs (ex: ao ativar `python-fastapi-development`, prioriza automaticamente `api-designer`).
-- **Binary Index Cache (`.agent/index_cache.pkl`)**: Serialização binária pré-compilada do índice BM25 com invalidação instantânea via verificação de `mtime`, reduzindo a inicialização a zero overhead de CPU.
-- **Remoção Win32 em Lote (Batch Junction Deletion)**: Limpeza em subprocesso único otimizada para ambientes com bloqueio de sincronização NTFS e OneDrive (`fsutil reparsepoint delete`).
-- **Protocolo MCP Totalmente Conforme**: Handshake com suporte formal a `listChanged` para `tools` e `resources`, emitindo notificações em tempo real para sincronização de estado com o Antigravity.
+- **Binary Index Cache (`.agent/index_cache.pkl`)**: Serialização binária pré-compilada do índice BM25 com invalidação instantânea profunda baseada em `mtime` dos arquivos `SKILL.md`.
+- **Protocolo MCP Totalmente Conforme**: Handshake com suporte formal a `listChanged` e ferramentas expostas para o Antigravity.
 - **Pré-Agente Multimodal Gratuito (OpenRouter)**: Decompõe demandas brutas, informais ou prints de interface em escopo, contrato e checklist cirúrgicos usando modelos gratuitos em cascata (`inclusionai/ling-3.0-flash-vl:free`, `nex-agi/nex-n2.5-mini:free`) antes de acionar o modelo principal.
-- **Expansão Semântica Automática de Query**: Se o BM25 receber uma solicitação com score abaixo do limiar (`< 4.0`), consulta silenciosamente a IA gratuita para deduzir termos técnicos ocultos, elevando a precisão de busca sem custo de tokens pagos.
-- **Motor BM25 Puro + Bundles**: Busca lexical de precisão com expansão de sinônimos, suporte a combos multi-skill e latência média de 6ms. Sem dependências externas (`pip install` desnecessário).
-- **Montagem Instantânea (0ms)**: Usa Windows Directory Junctions (NTFS) e symlinks. Não duplica arquivos físicos e não requer privilégios de Administrador.
-- **Dupla Trava de Coexistência com Projetos Existentes**:
-  - **Rastreamento de Sessão (`.router_session.json`)**: O router registra formalmente cada injeção que realiza. Ele só gerencia pastas que ele mesmo montou.
-  - **Inspeção de Atributos NTFS (`FILE_ATTRIBUTE_REPARSE_POINT`)**: Pastas físicas pré-existentes são detectadas como `[NATIVA/LOCAL]` e **nunca são deletadas ou sobrescritas**.
-  - **Proteção Estrita Contra Path Traversal**: Confinamento seguro das operações de remoção estritamente ao diretório de skills do workspace (`is_relative_to`).
-- **Isolamento de Workspace no Servidor MCP (`scoped_workspace`)**:
-  - Todas as chamadas MCP (`route_skills`, `reset_skills`, `apply_preset`, `pin_skill`, `unpin_skill`) operam com context manager que aceita caminhos de pasta ou arquivo e restaura o workspace original no `finally`.
-- **Suíte Completa de Testes Automatizados (18/18)**: Testes de regressão cobrindo roteamento, bundles, hooks nativos, path-triggers, cache binário e conformidade MCP em [tests/test_router.py](file:///c:/Users/Kaick.couto/Documents/agy-skill-router/tests/test_router.py).
+- **Suíte Completa de Testes Automatizados (28/28)**: Testes de regressão cobrindo roteamento, bundles, hooks nativos, path-triggers, cache binário, importação, scaffolding e conformidade MCP em [tests/test_router.py](tests/test_router.py).
 - **Diagnóstico 1-Clique (`scripts/doctor.py`)**: Validação de 7 pilares de integridade técnica em milissegundos.
 
 ---
@@ -110,7 +109,9 @@ O script `scripts/setup_agy.py` registra o servidor automaticamente no arquivo g
 ### Ferramentas Expostas pelo MCP:
 | Ferramenta | Descrição |
 | :--- | :--- |
-| `route_skills(task, workspace_dir?)` | Roteia e monta via junction as 1–2 skills ideais para a demanda. |
+| `route_skills(task, top_k?, block?, workspace_dir?)` | Roteia e monta via junction as 1–2 skills ideais para a demanda. |
+| `pre_agent_plan(task, image_path?, auto_route_skills?, top_k?, workspace_dir?)` | Decompõe demanda técnica e prints via IA gratuita do OpenRouter e auto-injeta as skills. |
+| `lint_skill(skill_id)` | Inspeciona e audita uma skill técnica, validando frontmatter YAML, tamanho e ausência de tells de IA. |
 | `apply_preset(preset_name, workspace_dir?)` | Ativa e fixa um perfil completo (`cms`, `fullstack`, `qa`). |
 | `list_skills(workspace_dir?)` | Lista skills ativas marcando `[PINNED]`, `[ROUTER-JUNCTION]` e `[NATIVA/LOCAL]`. |
 | `reset_skills(force?, workspace_dir?)` | Remove junções temporárias mantendo skills fixadas e nativas. |
@@ -118,11 +119,22 @@ O script `scripts/setup_agy.py` registra o servidor automaticamente no arquivo g
 | `unpin_skill(skill_id, workspace_dir?)` | Desafixa e remove a skill. |
 | `skill_info(skill_id)` | Retorna metadados, gatilhos e documentação da skill. |
 | `search_skills(query, top_k?, block?)` | Busca semântica e pontuação BM25 sem ativar arquivos. |
-| `pre_agent_plan(task, image_path?, auto_route_skills?, workspace_dir?)` | Decompõe demanda técnica e prints via IA gratuita do OpenRouter e auto-injeta as skills. |
 
 ---
 
 ## 💻 Uso via Linha de Comando (CLI)
+
+### 0. Gerenciamento & Ciclo de Vida de Skills (Novo!)
+```bash
+# Inicializar uma nova skill técnica com diretrizes Ponytail/Anti-Slop:
+python scripts/auto_route.py init "minha-nova-skill" "Descrição concisa dos padrões técnicos"
+
+# Auditar e validar a qualidade/orçamento de tokens de uma skill:
+python scripts/auto_route.py lint "taste-skill"
+
+# Importar diretamente uma skill do GitHub (ex: Matt Pocock, Vercel Labs):
+python scripts/auto_route.py import "mattpocock/skills@skills/engineering/codebase-design"
+```
 
 ### 0. Pré-Agente & Decomposição Gratuita (OpenRouter)
 ```bash
