@@ -43,9 +43,9 @@
     "slack-gif-creator": ["gif", "animacao", "slack", "sticker", "frame"],
     "brand-guidelines": ["marca", "identidade", "branding", "paleta", "cores", "padrao"],
     "doc-coauthoring": ["coautoria", "revisao", "editorial", "redigir", "co-autor"],
-    "internal-comms": ["comunicacao", "comunicado", "anuncio", "newsletter", "memorando"],
     "ponytail": ["ponytail", "yagni", "lazy", "minimalista", "simplificar", "enxuto", "bloat", "over-engineering"],
-    "taste-skill": ["taste", "anti-slop", "design-taste", "estetica", "visual-clean", "landing", "portfolio", "redesign", "ui-polish"]
+    "taste-skill": ["taste", "anti-slop", "design-taste", "estetica", "visual-clean", "landing", "portfolio", "redesign", "ui-polish"],
+    "archify": ["archify", "diagrama", "diagramas", "arquitetura", "workflow", "dataflow", "sequencia", "fluxo", "mermaid", "topology"]
   },
   "skill_bundles": {
     "backend-fastapi-api": {
@@ -157,8 +157,10 @@
     "frontend-design": ["tailwind-patterns", "taste-skill", "react-component-performance"],
     "tailwind-patterns": ["frontend-design", "taste-skill", "react-component-performance"],
     "taste-skill": ["frontend-design", "tailwind-patterns"],
-    "webapp-testing": ["vitest-skill"],
-    "vitest-skill": ["webapp-testing"],
+    "webapp-testing": ["vitest-skill", "tdd"],
+    "vitest-skill": ["webapp-testing", "tdd"],
+    "tdd": ["webapp-testing", "vitest-skill"],
+    "diagnosing-bugs": ["webapp-testing", "vitest-skill", "ponytail"],
     "xlsx": ["pdf"],
     "pdf": ["xlsx"]
   },
@@ -166,7 +168,8 @@
     "pdf", "xlsx", "docx", "pptx", "frontend-design", "webapp-testing",
     "mcp-builder", "canvas-design", "algorithmic-art", "brand-guidelines",
     "doc-coauthoring", "internal-comms", "slack-gif-creator", "theme-factory",
-    "web-artifacts-builder", "claude-api", "academy-guide", "ponytail", "taste-skill"
+    "web-artifacts-builder", "claude-api", "academy-guide", "ponytail", "taste-skill",
+    "tdd", "diagnosing-bugs"
   ],
   "blocked_domains_regex": [
     "(^|-)(marketing|copywriting|seo|affiliate|growth|funnel|dropship|influencer|viral|content-strategist|blogwriting)($|-)",
@@ -184,6 +187,8 @@
       "skills": [
         "ponytail",
         "taste-skill",
+        "tdd",
+        "diagnosing-bugs",
         "supabase-postgres-best-practices",
         "python-fastapi-development",
         "tailwind-patterns",
@@ -226,8 +231,12 @@
       "preferred_skills": ["python-fastapi-development", "api-designer"]
     },
     "testing_verify": {
-      "verbs": ["teste", "testar", "validar", "verificar", "e2e", "unitario", "cypress", "playwright", "vitest"],
-      "preferred_skills": ["webapp-testing", "vitest-skill"]
+      "verbs": ["teste", "testar", "validar", "verificar", "e2e", "unitario", "cypress", "playwright", "vitest", "tdd", "red-green-refactor"],
+      "preferred_skills": ["tdd", "webapp-testing", "vitest-skill"]
+    },
+    "diagnose_debug": {
+      "verbs": ["diagnosticar", "diagnostique", "debugar", "debug", "investigar", "investigue", "erro", "quebrando", "falhando", "lento", "regression"],
+      "preferred_skills": ["diagnosing-bugs", "webapp-testing"]
     }
   }
 }

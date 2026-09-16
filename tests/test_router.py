@@ -182,7 +182,7 @@ class TestSkillRouterRegression(unittest.TestCase):
         expected_mtime = (
             auto_route.MANIFEST_PATH.stat().st_mtime,
             auto_route.RULES_PATH.stat().st_mtime,
-            (auto_route.ROOT / "skills_custom").stat().st_mtime
+            auto_route._get_custom_mtime()
         )
         self.assertEqual(auto_route._CACHED_MTIME, expected_mtime)
 
@@ -272,6 +272,15 @@ class TestSkillRouterRegression(unittest.TestCase):
             if dummy_dir.exists():
                 shutil.rmtree(dummy_dir, ignore_errors=True)
 
+    def test_28_tdd_and_diagnosing_bugs_routing(self):
+        """Verifica se as skills tdd e diagnosing-bugs são roteadas corretamente."""
+        res_tdd = auto_route.route("desenvolva este endpoint usando tdd e red-green-refactor", top_k=2)
+        self.assertIn("tdd", res_tdd["skills"])
+
+        res_debug = auto_route.route("preciso debugar e investigar esse erro que está quebrando o sistema", top_k=2)
+        self.assertIn("diagnosing-bugs", res_debug["skills"])
+
 if __name__ == '__main__':
     unittest.main()
+
 
