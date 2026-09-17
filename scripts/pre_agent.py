@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import re
 import json
@@ -192,7 +192,27 @@ def call_openrouter(prompt: str, image_path: str = None, system_prompt: str = No
     raise RuntimeError(f"Todos os tiers falharam: {last_error}")
 
 def expand_query(query: str) -> list[str]:
-    """Extrai termos técnicos e conceitos de demandas vagas usando IA gratuita."""
+    """Extrai termos técnicos e conceitos de demandas vagas usando TypeSafe AI (Tier 0) com fallback OpenRouter."""
+    try:
+        import typesafe_client
+        res = typesafe_client.classify_task(query)
+        if res and res.get("should_act") and res.get("gate_score", 0.0) >= 0.30:
+            block = res.get("block", "")
+            intent = res.get("intent", "")
+            block_terms = {
+                "core-database": ["database", "sql", "postgres", "supabase", "migrations"],
+                "core-backend": ["backend", "api", "fastapi", "endpoints", "auth"],
+                "core-frontend": ["frontend", "ui", "react", "tailwind", "components"],
+                "quality-testing": ["testing", "vitest", "playwright", "unit", "e2e"],
+                "cloud-devops": ["docker", "kubernetes", "containers", "ci", "deploy"],
+                "data-ai-engine": ["excel", "xlsx", "pdf", "reports", "data"]
+            }
+            terms = block_terms.get(block, []) + ([intent] if intent else [])
+            if terms:
+                return terms[:6]
+    except Exception:
+        pass
+
     if is_in_cooldown():
         return []
 
@@ -220,15 +240,33 @@ def pre_agent_decompose(task: str, image_path: str = None, auto_route_skills: bo
     import auto_route
     import manage_skills
 
-    # 1. Decomposição com IA gratuita (ou fallback local se em cooldown)
-    try:
-        res = call_openrouter(task, image_path)
-    except Exception as e:
-        res = {
-            "model_used": "offline-local",
-            "spec": f"## [AVISO]\nBypass do OpenRouter ({e}). Decomposição via motor local.\n\n## [CHECKLIST]\n1. Executar demanda: '{task}'",
-            "keywords": auto_route.tokenize(task)
-        }
+    # 1. Decomposição com IA (TypeSafe Jev como acelerador / OpenRouter multimodal / fallback local)
+    res = None
+    if not image_path:
+        try:
+            import typesafe_client
+            ts_eval = typesafe_client.classify_task(task)
+            if ts_eval and ts_eval.get("should_act") and ts_eval.get("gate_score", 0.0) >= 0.30:
+                expanded = expand_query(task)
+                keywords = list(set(auto_route.tokenize(task) + expanded))
+                res = {
+                    "model_used": "typesafe-jev-systemone",
+                    "spec": f"## [ESCOPO CIRÚRGICO]\n- Tarefa: {task}\n- Domínio: {ts_eval.get('block')} (Confiança: {int(ts_eval.get('block_confidence', 1.0)*100)}%)\n- Intenção: {ts_eval.get('intent')}\n\n## [CONTRATO & VALIDAÇÕES]\n- Conformidade técnica com padrões do projeto e tipagem formal.\n\n## [CHECKLIST DE IMPLEMENTAÇÃO]\n1. Inspecionar arquivos e dependências no workspace\n2. Executar alterações cirúrgicas para '{task}'\n3. Validar execução e testes",
+                    "keywords": keywords,
+                    "typesafe_eval": ts_eval
+                }
+        except Exception:
+            pass
+
+    if not res:
+        try:
+            res = call_openrouter(task, image_path)
+        except Exception as e:
+            res = {
+                "model_used": "offline-local",
+                "spec": f"## [AVISO]\nBypass do OpenRouter ({e}). Decomposição via motor local.\n\n## [CHECKLIST]\n1. Executar demanda: '{task}'",
+                "keywords": auto_route.tokenize(task)
+            }
 
     # 2. Correlaciona com o Vault de Skills via BM25
     query = " ".join(res["keywords"]) if res["keywords"] else task

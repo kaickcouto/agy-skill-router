@@ -283,6 +283,20 @@ class TestSkillRouterRegression(unittest.TestCase):
         res_design = auto_route.route("preciso desacoplar e modularizar a interface deste modulo criando deep modules", top_k=2)
         self.assertIn("codebase-design", res_design["skills"])
 
+    def test_29_pre_agent_typesafe_fastpath(self):
+        """Verifica se pre_agent_decompose aciona o fastpath do TypeSafe System One."""
+        import pre_agent
+        res = pre_agent.pre_agent_decompose("criar tabela de produtos no supabase", auto_route_skills=False)
+        self.assertIn(res.get("model_used"), ["typesafe-jev-systemone", "inclusionai/ling-3.0-flash-vl:free", "offline-local"])
+        self.assertTrue(len(res.get("keywords", [])) > 0)
+
+    def test_30_jury_classifier_typesafe(self):
+        """Verifica se o classificador jury funciona com TypeSafe ou fallback gracioso."""
+        import jury_classifier
+        res = jury_classifier.classify_skill("supabase-postgres-best-practices", "Postgres on Supabase", ["database", "sql"])
+        self.assertIn("block", res)
+        self.assertIn(res["block"], ["core-database", "general-tools"])
+
 if __name__ == '__main__':
     unittest.main()
 

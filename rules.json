@@ -45,7 +45,8 @@
     "doc-coauthoring": ["coautoria", "revisao", "editorial", "redigir", "co-autor"],
     "ponytail": ["ponytail", "yagni", "lazy", "minimalista", "simplificar", "enxuto", "bloat", "over-engineering"],
     "taste-skill": ["taste", "anti-slop", "design-taste", "estetica", "visual-clean", "landing", "portfolio", "redesign", "ui-polish"],
-    "archify": ["archify", "diagrama", "diagramas", "arquitetura", "workflow", "dataflow", "sequencia", "fluxo", "mermaid", "topology"]
+    "archify": ["archify", "diagrama", "diagramas", "arquitetura", "workflow", "dataflow", "sequencia", "fluxo", "mermaid", "topology"],
+    "typesafe-ai": ["typesafe", "typesafe-ai", "jev", "system-one", "system1", "m2m", "pydantic-ai", "score", "noul", "choice", "structured-decisions"]
   },
   "skill_bundles": {
     "backend-fastapi-api": {
@@ -171,7 +172,7 @@
     "mcp-builder", "canvas-design", "algorithmic-art", "brand-guidelines",
     "doc-coauthoring", "internal-comms", "slack-gif-creator", "theme-factory",
     "web-artifacts-builder", "claude-api", "academy-guide", "ponytail", "taste-skill",
-    "tdd", "diagnosing-bugs", "codebase-design"
+    "tdd", "diagnosing-bugs", "codebase-design", "typesafe-ai"
   ],
   "blocked_domains_regex": [
     "(^|-)(marketing|copywriting|seo|affiliate|growth|funnel|dropship|influencer|viral|content-strategist|blogwriting)($|-)",
@@ -192,6 +193,7 @@
         "tdd",
         "diagnosing-bugs",
         "codebase-design",
+        "typesafe-ai",
         "supabase-postgres-best-practices",
         "python-fastapi-development",
         "tailwind-patterns",
@@ -244,6 +246,10 @@
     "modular_design": {
       "verbs": ["modularizar", "modular", "acoplamento", "desacoplar", "interface", "deep module", "seam", "arquitetura", "camadas", "coesao", "coesão"],
       "preferred_skills": ["codebase-design", "ponytail"]
+    },
+    "typesafe_decision": {
+      "verbs": ["classifique", "classificar", "extrair", "extracao", "rotear", "roteamento", "decisao", "estruturado", "jev", "typesafe"],
+      "preferred_skills": ["typesafe-ai"]
     }
   }
 }

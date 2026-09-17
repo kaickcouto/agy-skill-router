@@ -39,7 +39,18 @@ def should_trigger_pre_agent(prompt: str) -> bool:
     # Pula saudações e dúvidas conceituais genéricas
     if clean.startswith(("o que e", "o que é", "como funciona", "qual a diferenca", "qual a diferença", "explique", "me diga", "ola", "oi", "bom dia", "boa tarde", "boa noite")):
         return False
-    # Aciona se contiver termo de ação técnica
+
+    # 1. Avaliação probabilística oficial via TypeSafe AI (3-Noul Gate: acts + doc + (1-prose))
+    try:
+        import typesafe_client
+        res = typesafe_client.classify_task(prompt)
+        if res:
+            # Limiar oficial do cookbook skill_suggestion.md: gate_score >= 0.30
+            return bool(res.get("should_act"))
+    except Exception:
+        pass
+
+    # 2. Fallback heurístico
     return any(term in clean for term in ACTION_TRIGGERS)
 
 def get_unprocessed_user_request(transcript_path: str) -> tuple[int, str]:

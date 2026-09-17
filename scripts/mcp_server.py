@@ -319,6 +319,8 @@ def handle_route_skills(arguments: dict) -> dict:
         "bundle_matched": res.get("bundle") if res else None,
         "activated_skills": activated,
         "pinned_skills": res.get("pinned", []) if res else [],
+        "router_confidence": res.get("confidence") if res else None,
+        "router_status": res.get("status") if res else None,
         "workspace": str(manage_skills.get_active_dir().parent),
         "cli_output": stdout_text
     }
@@ -451,11 +453,11 @@ def handle_pre_agent_plan(arguments: dict) -> dict:
     if not task:
         raise ValueError("task é obrigatório.")
     img = arguments.get("image_path")
-    auto_route = bool(arguments.get("auto_route_skills", True))
+    auto_route_flag = bool(arguments.get("auto_route_skills", True))
     top_k = safe_int(arguments.get("top_k"), default=3, min_val=1, max_val=6)
     ws = arguments.get("workspace_dir")
     with scoped_workspace(ws):
-        res = pre_agent.pre_agent_decompose(task, image_path=img, auto_route_skills=auto_route, top_k=top_k)
+        res = pre_agent.pre_agent_decompose(task, image_path=img, auto_route_skills=auto_route_flag, top_k=top_k)
         return {
             "content": [
                 {

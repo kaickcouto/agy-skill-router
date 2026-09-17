@@ -146,13 +146,15 @@ class BM25Index:
 
         scores = []
         for sid, meta in self.manifest.items():
-            domain = meta.get("category") or meta.get("thematic_block")
+            domain = meta.get("thematic_block") or meta.get("category")
             if category_filter and domain != category_filter:
                 continue
-            if block_filter and domain != block_filter:
-                continue
-
             norm_id = normalize(sid)
+            if block_filter:
+                allowed_blocks = block_filter if isinstance(block_filter, (list, tuple, set)) else [block_filter]
+                if domain not in allowed_blocks and sid not in intent_bonuses and norm_id not in query_tokens:
+                    continue
+
             id_parts = set(norm_id.split("-"))
 
             has_unrelated = False
@@ -337,8 +339,32 @@ def detect_path_in_prompt(prompt: str) -> list[str]:
     seen = set()
     return [s for s in detected if not (s in seen or seen.add(s))]
 
-def detect_primary_block(prompt: str) -> str | None:
-    """Classifica o domínio temático principal (Two-Tier Routing) para eliminar ruído inter-stack."""
+def detect_primary_block(prompt: str) -> str | list[str] | None:
+    """Classifica o domínio temático principal (Two-Tier Routing) com TypeSafe AI (Jev) e fallback heurístico."""
+    try:
+        import typesafe_client
+        res = typesafe_client.classify_task(prompt)
+        if res and res.get("should_act"):
+            block_map = {
+                "core-database": "database",
+                "core-backend": "backend",
+                "core-frontend": "frontend",
+                "quality-testing": "testing",
+                "cloud-devops": "cloud-devops",
+                "data-ai-engine": "data-ai"
+            }
+            if res.get("is_multistack") and res.get("active_blocks"):
+                mapped_blocks = [block_map[b] for b in res["active_blocks"] if b in block_map]
+                if len(mapped_blocks) >= 2:
+                    return mapped_blocks
+            if res.get("block_confidence", 0.0) >= 0.70:
+                block = res.get("block")
+                mapped = block_map.get(block)
+                if mapped:
+                    return mapped
+    except Exception:
+        pass
+
     tokens = set(tokenize(prompt))
     best_block = None
     best_matches = 0
@@ -463,6 +489,24 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
         selected_results = [r for r in results if is_valid_selection(r)][:top_k]
     selected_ids = [r[1] for r in selected_results]
 
+    shortlist_rejected = False
+    if selected_ids:
+        # Padrão Oficial TypeSafe: Verificação de Shortlist com Jev para descarte de falsos positivos
+        try:
+            import typesafe_client
+            winner, fits_map, approved = typesafe_client.verify_shortlist_fit(prompt, selected_ids, index.manifest)
+            if not approved:
+                print(f"[*] [TYPESAFE-VERIFY] Shortlist descartado por falta de aderência ({fits_map}).")
+                selected_ids = []
+                shortlist_rejected = True
+            else:
+                selected_ids = [sid for sid in selected_ids if sid in approved]
+                if winner and winner in selected_ids and selected_ids[0] != winner:
+                    selected_ids.remove(winner)
+                    selected_ids.insert(0, winner)
+        except Exception:
+            pass
+
     if selected_ids:
         confidence = selected_results[0][0]
         status = "routed"
@@ -471,26 +515,44 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
     else:
         confidence = results[0][0] if results else 0.0
         # 3. Resgate por Expansão Semântica com Pré-Agente Gratuito
-        try:
-            import pre_agent
-            if results and results[0][0] >= threshold:
-                print(f"[*] Termos específicos não detectados nos resultados principais. Consultando expansão semântica gratuita...")
-            else:
-                print(f"[*] Limiar não atingido ({confidence:.2f} < {threshold}). Consultando expansão semântica gratuita...")
-            exp_terms = pre_agent.expand_query(prompt)
-            if exp_terms:
-                exp_query = f"{prompt} {' '.join(exp_terms)}"
-                exp_results = index.score(exp_query, category_filter=category, block_filter=block)
-                fresh_exp = [r for r in exp_results if is_valid_selection(r) and r[1] not in already_pinned]
-                selected_results = (fresh_exp if fresh_exp else [r for r in exp_results if is_valid_selection(r)])[:top_k]
-                selected_ids = [r[1] for r in selected_results]
-                if selected_ids:
-                    confidence = selected_results[0][0]
-                    status = "semantic_routed"
-                    print(f"[*] Roteamento semântico resgatado para: {', '.join(selected_ids)} (Confiança: {confidence:.2f})")
-                    activated = add(selected_ids)
-        except Exception:
-            pass
+        if not shortlist_rejected:
+            try:
+                import typesafe_client
+                ts_check = typesafe_client.classify_task(prompt)
+                if ts_check and (not ts_check.get("should_act") or ts_check.get("block") == "general-tools"):
+                    raise ValueError("Ação não requerida ou código genérico.")
+                import pre_agent
+                if results and results[0][0] >= threshold:
+                    print(f"[*] Termos específicos não detectados nos resultados principais. Consultando expansão semântica gratuita...")
+                else:
+                    print(f"[*] Limiar não atingido ({confidence:.2f} < {threshold}). Consultando expansão semântica gratuita...")
+                exp_terms = pre_agent.expand_query(prompt)
+                if exp_terms:
+                    exp_query = f"{prompt} {' '.join(exp_terms)}"
+                    exp_results = index.score(exp_query, category_filter=category, block_filter=block)
+                    fresh_exp = [r for r in exp_results if is_valid_selection(r) and r[1] not in already_pinned]
+                    selected_results = (fresh_exp if fresh_exp else [r for r in exp_results if is_valid_selection(r)])[:top_k]
+                    selected_ids = [r[1] for r in selected_results]
+                    if selected_ids:
+                        # Verificação rigorosa com TypeSafe no resgate semântico
+                        try:
+                            winner, fits_map, approved = typesafe_client.verify_shortlist_fit(prompt, selected_ids, index.manifest)
+                            if not approved:
+                                selected_ids = []
+                            else:
+                                selected_ids = [sid for sid in selected_ids if sid in approved]
+                                if winner and winner in selected_ids and selected_ids[0] != winner:
+                                    selected_ids.remove(winner)
+                                    selected_ids.insert(0, winner)
+                        except Exception:
+                            pass
+                    if selected_ids:
+                        confidence = selected_results[0][0]
+                        status = "semantic_routed"
+                        print(f"[*] Roteamento semântico resgatado para: {', '.join(selected_ids)} (Confiança: {confidence:.2f})")
+                        activated = add(selected_ids)
+            except Exception:
+                pass
 
         if not selected_ids and git_skills:
             fresh_git = [s for s in git_skills if s not in already_pinned]

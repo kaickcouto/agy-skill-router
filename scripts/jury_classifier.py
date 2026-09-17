@@ -99,6 +99,55 @@ class TriMindJudge:
         }
 
 def classify_skill(skill_id: str, desc: str, tags: list[str]) -> dict:
+    # 1. Avaliação oficial via TypeSafe AI (Choice para Bloco + Score para Qualidade)
+    try:
+        import typesafe_client
+        if typesafe_client.get_api_key():
+            questions = {
+                "block": {
+                    "type": "choice",
+                    "instructions": "Which technical thematic block does this engineering skill belong to?",
+                    "criteria": {
+                        "core-frontend": "UI components, React, Next.js, Tailwind CSS, HTML/CSS, frontend design",
+                        "core-backend": "APIs, FastAPI, Node.js, Express, Python backend, REST, GraphQL, JWT auth",
+                        "core-database": "PostgreSQL, Supabase, SQL, migrations, database schemas, tables, RLS",
+                        "quality-testing": "Testing, Vitest, Playwright, Cypress, QA, E2E, code quality and audit",
+                        "cloud-devops": "Docker, Kubernetes, CI/CD, deployment, cloud infrastructure, Linux",
+                        "data-ai-engine": "Data processing, spreadsheets, XLSX, PDF, scrapers, AI prompts, LLMs",
+                        "office-docs": "Office documents, Word docx, presentations pptx, report formatting",
+                        "general-tools": "Generic programming concepts, syntax or general developer utilities"
+                    }
+                },
+                "quality": {
+                    "type": "score",
+                    "instructions": "How production-grade, specific, and actionable is this skill description?",
+                    "criteria": [
+                        "Vague, superficial or lacks concrete scope",
+                        "Adequate description with identifiable use cases",
+                        "Highly specific production-grade engineering guide"
+                    ]
+                }
+            }
+            state = {"skill_id": skill_id, "description": desc[:500], "tags": tags[:8]}
+            answers = typesafe_client.evaluate_systemone(state, questions, timeout=2.0)
+            if answers and "block" in answers:
+                b_ans = answers["block"]
+                q_ans = answers.get("quality", {})
+                block = b_ans.get("choice", "general-tools")
+                b_conf = b_ans.get("confidence", 0.8)
+                q_score = q_ans.get("score", 0.5)
+                return {
+                    "block": block,
+                    "confidence": round(b_conf * 10, 1),
+                    "quality_score": round(q_score, 2),
+                    "advocate": f"TypeSafe AI Jev: classificada em '{block}' com probabilidade {b_ans.get('probabilities', {}).get(block, 1.0):.2f}.",
+                    "critic": f"Qualidade da documentação avaliada em {q_score:.2f}/1.00.",
+                    "verdict": f"Aprovada para '{block}' via TypeSafe System One"
+                }
+    except Exception:
+        pass
+
+    # 2. Fallback heurístico (TriMindJudge)
     best_block = "general-tools"
     best_score = 0
 
