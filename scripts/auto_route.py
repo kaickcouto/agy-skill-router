@@ -367,7 +367,7 @@ def detect_primary_block(prompt: str) -> str | list[str] | None:
                 block = res.get("block")
                 mapped = block_map.get(block)
                 if mapped:
-                    return mapped
+                    return mapped[0] if len(mapped) == 1 else mapped
     except Exception:
         pass
 
