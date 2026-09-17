@@ -7598,7 +7598,8 @@
       "needs",
       "opportunities"
     ],
-    "required_env": []
+    "required_env": [],
+    "thematic_block": "architecture"
   },
   {
     "id": "codex-delegate",
@@ -10085,7 +10086,8 @@
       "something",
       "throwing"
     ],
-    "required_env": []
+    "required_env": [],
+    "thematic_block": "testing"
   },
   {
     "id": "diagram-generator",
@@ -10618,7 +10620,8 @@
       "file",
       "files"
     ],
-    "required_env": []
+    "required_env": [],
+    "thematic_block": "data-ai"
   },
   {
     "id": "docx-official",
@@ -21379,7 +21382,8 @@
       "merging",
       "multiple"
     ],
-    "required_env": []
+    "required_env": [],
+    "thematic_block": "data-ai"
   },
   {
     "id": "pdf-conversion-router",
@@ -22319,7 +22323,8 @@
       "files",
       "includes"
     ],
-    "required_env": []
+    "required_env": [],
+    "thematic_block": "data-ai"
   },
   {
     "id": "pptx-deck-creation",

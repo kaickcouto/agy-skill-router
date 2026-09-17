@@ -148,6 +148,7 @@
     "backend": ["api", "apis", "endpoint", "endpoints", "rota", "rotas", "fastapi", "pydantic", "controller", "service", "backend", "crud", "auth", "jwt"],
     "frontend": ["tela", "telas", "interface", "ui", "ux", "componente", "componentes", "layout", "visual", "react", "tailwind", "css", "render", "modal", "botao"],
     "testing": ["teste", "testes", "testar", "playwright", "vitest", "cypress", "e2e", "qa", "unitario", "mock", "assert"],
+    "devops": ["docker", "dockerfile", "container", "containers", "kubernetes", "k8s", "ci", "cd", "deploy", "pipeline", "ingress", "cluster"],
     "data-ai": ["planilha", "planilhas", "excel", "xlsx", "pdf", "relatorio", "relatorios", "devis", "ppa", "pandas", "openpyxl"]
   },
   "skill_affinity": {

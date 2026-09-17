@@ -346,17 +346,23 @@ def detect_primary_block(prompt: str) -> str | list[str] | None:
         res = typesafe_client.classify_task(prompt)
         if res and res.get("should_act"):
             block_map = {
-                "core-database": "database",
-                "core-backend": "backend",
-                "core-frontend": "frontend",
-                "quality-testing": "testing",
-                "cloud-devops": "cloud-devops",
-                "data-ai-engine": "data-ai"
+                "core-database": ["database"],
+                "core-backend": ["backend"],
+                "core-frontend": ["frontend", "design-media"],
+                "quality-testing": ["testing"],
+                "cloud-devops": ["devops", "cloud-devops"],
+                "data-ai-engine": ["data-ai", "productivity"]
             }
             if res.get("is_multistack") and res.get("active_blocks"):
-                mapped_blocks = [block_map[b] for b in res["active_blocks"] if b in block_map]
-                if len(mapped_blocks) >= 2:
-                    return mapped_blocks
+                flattened = []
+                for b in res["active_blocks"]:
+                    targets = block_map.get(b, [])
+                    if isinstance(targets, list):
+                        flattened.extend(targets)
+                    elif targets:
+                        flattened.append(targets)
+                if len(flattened) >= 2:
+                    return list(dict.fromkeys(flattened))
             if res.get("block_confidence", 0.0) >= 0.70:
                 block = res.get("block")
                 mapped = block_map.get(block)
@@ -373,6 +379,13 @@ def detect_primary_block(prompt: str) -> str | list[str] | None:
         if matches > best_matches and matches >= 2:
             best_matches = matches
             best_block = block_name
+
+    if best_block == "data-ai":
+        return ["data-ai", "productivity"]
+    if best_block == "devops":
+        return ["devops", "cloud-devops"]
+    if best_block == "frontend":
+        return ["frontend", "design-media"]
     return best_block
 
 def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = False, category: str = None, block: str = None):
@@ -508,7 +521,8 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
             pass
 
     if selected_ids:
-        confidence = selected_results[0][0]
+        score_lookup = {sid: sc for sc, sid, _ in (results or [])}
+        confidence = score_lookup.get(selected_ids[0], selected_results[0][0])
         status = "routed"
         print(f"[*] Roteando automaticamente para: {', '.join(selected_ids)} (Confiança: {confidence:.2f} >= {threshold})")
         activated = add(selected_ids)
@@ -547,7 +561,8 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
                         except Exception:
                             pass
                     if selected_ids:
-                        confidence = selected_results[0][0]
+                        score_lookup = {sid: sc for sc, sid, _ in (exp_results or [])}
+                        confidence = score_lookup.get(selected_ids[0], selected_results[0][0])
                         status = "semantic_routed"
                         print(f"[*] Roteamento semântico resgatado para: {', '.join(selected_ids)} (Confiança: {confidence:.2f})")
                         activated = add(selected_ids)

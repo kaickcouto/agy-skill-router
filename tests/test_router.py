@@ -297,6 +297,18 @@ class TestSkillRouterRegression(unittest.TestCase):
         self.assertIn("block", res)
         self.assertIn(res["block"], ["core-database", "general-tools"])
 
+    def test_31_devops_block_and_category_alignment(self):
+        """Verifica se o bloco devops/cloud-devops mapeia corretamente e roteia docker-expert."""
+        res = auto_route.route("crie um container docker multistage para deploy", top_k=2)
+        self.assertEqual(res["status"], "routed")
+        self.assertIn("docker-expert", res["skills"])
+
+    def test_32_report_data_ai_productivity_alignment(self):
+        """Verifica se queries de relatorios e documentos em anexo roteiam para pdf/docx."""
+        res = auto_route.route("extraia o relatorio financeiro em anexo", top_k=2)
+        self.assertEqual(res["status"], "routed")
+        self.assertTrue("pdf" in res["skills"] or "docx" in res["skills"])
+
 if __name__ == '__main__':
     unittest.main()
 
