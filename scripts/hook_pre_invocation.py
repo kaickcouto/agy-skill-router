@@ -151,7 +151,7 @@ def main():
 
     # Gating: ignora se for prompt trivial, casual ou não-técnico
     should_act = ts_eval.get("should_act") if ts_eval else should_trigger_pre_agent(user_prompt)
-    if not should_act and not should_trigger_pre_agent(user_prompt):
+    if not should_act:
         sys.stdout.write("{}\n")
         return
 

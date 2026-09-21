@@ -47,7 +47,8 @@ def get_api_key() -> str | None:
 
 def _normalize_text(text: str) -> str:
     norm = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("utf-8").lower()
-    norm = re.sub(r'[^\w\s]', ' ', norm)
+    # Preserva símbolos técnicos de linguagens/ferramentas (+, #, ., -) e remove pontuação puramente sintática
+    norm = re.sub(r'[^\w\s\+#\.\-]', ' ', norm)
     return ' '.join(norm.split())
 
 def _cache_key(state: Any, questions: dict) -> str:
@@ -62,6 +63,13 @@ def _cache_key(state: Any, questions: dict) -> str:
 def log_telemetry(event: str, details: dict):
     try:
         TELEMETRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        # Rotação simples: se o log exceder 1MB, mantém os 2000 eventos mais recentes
+        if TELEMETRY_FILE.exists() and TELEMETRY_FILE.stat().st_size > 1_000_000:
+            try:
+                old_lines = TELEMETRY_FILE.read_text(encoding="utf-8").splitlines()
+                TELEMETRY_FILE.write_text("\n".join(old_lines[-2000:]) + "\n", encoding="utf-8")
+            except Exception:
+                pass
         entry = {
             "ts": time.time(),
             "event": event,

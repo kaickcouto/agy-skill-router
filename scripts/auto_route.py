@@ -533,8 +533,8 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
             try:
                 import typesafe_client
                 ts_check = typesafe_client.classify_task(prompt)
-                if ts_check and (not ts_check.get("should_act") or ts_check.get("block") == "general-tools"):
-                    raise ValueError("Ação não requerida ou código genérico.")
+                if ts_check and (not ts_check.get("should_act") or ts_check.get("token_saving_recommended") or ts_check.get("block") == "general-tools"):
+                    raise ValueError("Ação não requerida, economia de tokens ativa ou código genérico.")
                 import pre_agent
                 if results and results[0][0] >= threshold:
                     print(f"[*] Termos específicos não detectados nos resultados principais. Consultando expansão semântica gratuita...")

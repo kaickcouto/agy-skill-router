@@ -310,12 +310,17 @@ class TestSkillRouterRegression(unittest.TestCase):
         self.assertTrue("pdf" in res["skills"] or "docx" in res["skills"])
 
     def test_33_typesafe_semantic_cache_normalization(self):
-        """Verifica se a normalizacao semantica de cache gera chaves identicas para variacoes de pontuacao/casing."""
+        """Verifica se a normalizacao semantica de cache gera chaves identicas para variacoes de pontuacao/casing sem colisao de simbolos."""
         import typesafe_client
         q = {"gate": {"type": "noul", "instructions": "test"}}
         k1 = typesafe_client._cache_key({"request": "Crie uma tabela Postgres!"}, q)
         k2 = typesafe_client._cache_key({"request": "  crie uma tabela postgres  "}, q)
         self.assertEqual(k1, k2, "Chaves de cache normalizadas semanticamente devem ser identicas.")
+
+        # Garante que símbolos de linguagens/tecnologias não colidam
+        k_cpp = typesafe_client._cache_key({"request": "como usar C++?"}, q)
+        k_cs = typesafe_client._cache_key({"request": "como usar C#?"}, q)
+        self.assertNotEqual(k_cpp, k_cs, "C++ e C# devem ter chaves de cache distintas.")
 
     def test_34_typesafe_speculative_fanout_guardrails(self):
         """Verifica se classify_task inclui os campos de fan-out especulativo (destrutivo, ambiguo e token-saving)."""
