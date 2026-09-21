@@ -21,6 +21,13 @@ ROOT = SCRIPT_DIR.parent
 STATE_FILE = ROOT / ".agent" / ".pre_agent_last_step"
 sys.path.insert(0, str(SCRIPT_DIR))
 
+OPT_IN_FLAGS = {"#plan", "/spec", "#spec", "--plan", "/plan"}
+EPIC_TRIGGERS = {
+    "arquitetar", "construir modulo", "construir módulo", "criar modulo", "criar módulo",
+    "planejar refatoracao", "planejar refatoração", "especificar arquitetura",
+    "novo modulo", "novo módulo"
+}
+
 ACTION_TRIGGERS = {
     "crie", "criar", "faca", "fazer", "adicione", "adicionar", "refatore", "refatorar",
     "altere", "alterar", "corrija", "corrigir", "implemente", "implementar", "teste", "testar",
@@ -32,12 +39,21 @@ ACTION_TRIGGERS = {
 }
 
 def should_trigger_pre_agent(prompt: str) -> bool:
-    """Evita congelar o chat em conversas casuais enquanto captura demandas técnicas curtas."""
+    """Evita congelar o chat em conversas casuais enquanto captura demandas técnicas reais."""
     clean = prompt.lower().strip()
-    if len(clean) < 6:
+    if any(flag in clean for flag in OPT_IN_FLAGS):
+        return True
+
+    # Ignora mensagens curtas de conversa/refinamento (< 35 caracteres)
+    if len(clean) < 35:
         return False
-    # Pula saudações e dúvidas conceituais genéricas
-    if clean.startswith(("o que e", "o que é", "como funciona", "qual a diferenca", "qual a diferença", "explique", "me diga", "ola", "oi", "bom dia", "boa tarde", "boa noite")):
+
+    # Pula saudações, dúvidas conceituais e aprovações simples
+    if clean.startswith((
+        "o que e", "o que é", "como funciona", "qual a diferenca", "qual a diferença",
+        "explique", "me diga", "ola", "oi", "bom dia", "boa tarde", "boa noite",
+        "o que acha", "pode comitar", "pode ir", "ok", "sim", "nao", "não", "valeu"
+    )):
         return False
 
     # 1. Avaliação probabilística oficial via TypeSafe AI (3-Noul Gate: acts + doc + (1-prose))
@@ -49,8 +65,8 @@ def should_trigger_pre_agent(prompt: str) -> bool:
     except Exception:
         pass
 
-    # 2. Fallback heurístico
-    return any(term in clean for term in ACTION_TRIGGERS)
+    # 2. Fallback heurístico estrito
+    return any(term in clean for term in EPIC_TRIGGERS) or any(term in clean for term in ACTION_TRIGGERS)
 
 def get_unprocessed_user_request(transcript_path: str) -> tuple[int, str]:
     if not transcript_path or not Path(transcript_path).exists():
@@ -117,6 +133,14 @@ def main():
     except Exception:
         pass
 
+    clean_lower = user_prompt.lower().strip()
+    wants_full_plan = any(flag in clean_lower for flag in OPT_IN_FLAGS) or any(epic in clean_lower for epic in EPIC_TRIGGERS)
+
+    # Mensagens curtas de refinamento/conversa sem flag explícita são ignoradas (0 tokens extras)
+    if len(clean_lower) < 35 and not wants_full_plan:
+        sys.stdout.write("{}\n")
+        return
+
     # Avaliação rápida com TypeSafe System One (0ms em cache)
     ts_eval = None
     try:
@@ -155,36 +179,48 @@ def main():
         sys.stdout.write("{}\n")
         return
 
-    # Executa a decomposição técnica silenciando logs intermediários no stdout
+    # Executa a ativação cirúrgica de skills e/ou decomposição técnica silenciando logs intermediários no stdout
     buf = io.StringIO()
     try:
         with contextlib.redirect_stdout(buf):
             import manage_skills
             if workspace:
                 manage_skills.set_workspace(workspace)
-            import pre_agent
-            res = pre_agent.pre_agent_decompose(user_prompt, auto_route_skills=True)
-        
-        spec = res.get("spec", "")
-        skills = res.get("activated_skills", [])
-        model = res.get("model_used", "free-tier")
 
-        msg_lines = []
-        if ts_eval and ts_eval.get("is_destructive"):
-            msg_lines.append("> [!CAUTION]\n> **[GUARDRAIL DE SEGURANÇA: AÇÃO POTENCIALMENTE DESTRUTIVA]**\n> Detectada intenção de exclusão ou alteração profunda de dados/código. Exija confirmação explícita do usuário antes de prosseguir com remoções irreversíveis.\n")
+            # Caso 1: Usuário pediu plano explícito ou é um épico de arquitetura
+            if wants_full_plan:
+                import pre_agent
+                res = pre_agent.pre_agent_decompose(user_prompt, auto_route_skills=True)
+                spec = res.get("spec", "")
+                skills = res.get("activated_skills", [])
+                model = res.get("model_used", "free-tier")
 
-        msg_lines.append(f"### [PRÉ-AGENTE TÉCNICO (Modelo: {model})]")
-        msg_lines.append(spec)
-        if skills:
-            msg_lines.append(f"\n> [!NOTE]\n> Skills auto-injetadas em `.agent/skills/`: {', '.join(skills)}")
+                msg_lines = []
+                if ts_eval and ts_eval.get("is_destructive"):
+                    msg_lines.append("> [!CAUTION]\n> **[GUARDRAIL DE SEGURANÇA: AÇÃO POTENCIALMENTE DESTRUTIVA]**\n> Detectada intenção de exclusão ou alteração profunda de dados/código. Exija confirmação explícita do usuário antes de prosseguir com remoções irreversíveis.\n")
+                msg_lines.append(f"### [PRÉ-AGENTE TÉCNICO (Modelo: {model})]")
+                msg_lines.append(spec)
+                if skills:
+                    msg_lines.append(f"\n> [!NOTE]\n> Skills auto-injetadas em `.agent/skills/`: {', '.join(skills)}")
+                output = {"injectSteps": [{"ephemeralMessage": "\n".join(msg_lines)}]}
 
-        output = {
-            "injectSteps": [
-                {
-                    "ephemeralMessage": "\n".join(msg_lines)
-                }
-            ]
-        }
+            # Caso 2: Tarefa técnica normal (Economia Máxima de Tokens - 0 ruído no chat)
+            else:
+                import auto_route
+                res = auto_route.route(user_prompt, top_k=2)
+                skills = res.get("activated", [])
+
+                msg_lines = []
+                if ts_eval and ts_eval.get("is_destructive"):
+                    msg_lines.append("> [!CAUTION]\n> **[GUARDRAIL DE SEGURANÇA: AÇÃO POTENCIALMENTE DESTRUTIVA]**\n> Detectada intenção de exclusão ou alteração profunda de dados/código. Exija confirmação explícita do usuário antes de prosseguir com remoções irreversíveis.")
+                if skills:
+                    msg_lines.append(f"> [!NOTE]\n> Skills auto-carregadas para esta demanda: {', '.join(skills)}")
+
+                if msg_lines:
+                    output = {"injectSteps": [{"ephemeralMessage": "\n\n".join(msg_lines)}]}
+                else:
+                    output = {}
+
         sys.stdout.write(json.dumps(output, ensure_ascii=False) + "\n")
     except Exception:
         sys.stdout.write("{}\n")
