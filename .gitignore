@@ -16,3 +16,4 @@ _temp_sources/
 .agent/hooks.json
 repo_context.txt
 repomix-output.*
+tests/tmp_workspace/

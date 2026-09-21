@@ -135,11 +135,12 @@ def classify_skill(skill_id: str, desc: str, tags: list[str]) -> dict:
                 q_ans = answers.get("quality", {})
                 block = b_ans.get("choice", "general-tools")
                 b_conf = b_ans.get("confidence", 0.8)
-                q_score = q_ans.get("score", 0.5)
+                q_raw = q_ans.get("score", 1.0)
+                q_score = round(q_raw / 2.0, 2)
                 return {
                     "block": block,
                     "confidence": round(b_conf * 10, 1),
-                    "quality_score": round(q_score, 2),
+                    "quality_score": q_score,
                     "advocate": f"TypeSafe AI Jev: classificada em '{block}' com probabilidade {b_ans.get('probabilities', {}).get(block, 1.0):.2f}.",
                     "critic": f"Qualidade da documentação avaliada em {q_score:.2f}/1.00.",
                     "verdict": f"Aprovada para '{block}' via TypeSafe System One"

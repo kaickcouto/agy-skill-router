@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # Cache de dois níveis: In-memory (0ms) + Disco compartilhado entre processos (0.5ms)
 _MEM_CACHE: dict[str, tuple[float, dict]] = {}
+_MEM_Q_CACHE: dict[str, tuple[float, dict]] = {}
 CACHE_FILE = ROOT / ".agent" / ".typesafe_cache.json"
 TELEMETRY_FILE = ROOT / ".agent" / "telemetry.jsonl"
 CACHE_TTL_SECONDS = 60.0
@@ -80,6 +81,15 @@ def log_telemetry(event: str, details: dict):
     except Exception:
         pass
 
+def log_feedback(prompt: str, chosen_skill: str, override: bool = False, details: dict = None):
+    """Registra feedback do usuário / override manual de skill para aprendizado contínuo e calibração."""
+    log_telemetry("feedback_event", {
+        "prompt": prompt,
+        "chosen_skill": chosen_skill,
+        "override": override,
+        "details": details or {}
+    })
+
 
 def _get_cached_answer(ckey: str) -> dict | None:
     now = time.time()
@@ -126,8 +136,18 @@ def _save_cached_answer(ckey: str, answers: dict):
     except Exception:
         pass
 
+def _norm_state(state: Any) -> str:
+    if isinstance(state, dict):
+        return json.dumps({k: (_normalize_text(v) if isinstance(v, str) else v) for k, v in state.items()}, sort_keys=True, default=str)
+    elif isinstance(state, str):
+        return _normalize_text(state)
+    return json.dumps(state, sort_keys=True, default=str)
+
+def _q_key(norm_s: str, q_id: str, q_def: dict) -> str:
+    return hashlib.sha256(f"{norm_s}::{q_id}::{json.dumps(q_def, sort_keys=True, default=str)}".encode("utf-8")).hexdigest()
+
 def evaluate_systemone(state: str | dict | list, questions: dict, timeout: float = 1.8) -> dict | None:
-    """Executa inferência com cache multi-processo e timeout rápido de 1.8s."""
+    """Executa inferência com cache multi-processo e granular no nível de perguntas."""
     api_key = get_api_key()
     if not api_key:
         return None
@@ -138,10 +158,28 @@ def evaluate_systemone(state: str | dict | list, questions: dict, timeout: float
         log_telemetry("systemone_eval", {"cached": True, "latency_ms": 0.0, "tokens_saved": 350})
         return cached
 
+    norm_s = _norm_state(state)
+    now = time.time()
+    all_cached = {}
+    missing_questions = {}
+    for q_id, q_def in questions.items():
+        qk = _q_key(norm_s, q_id, q_def)
+        if qk in _MEM_Q_CACHE:
+            ts, ans = _MEM_Q_CACHE[qk]
+            if now - ts < CACHE_TTL_SECONDS:
+                all_cached[q_id] = ans
+                continue
+        missing_questions[q_id] = q_def
+
+    if not missing_questions:
+        _save_cached_answer(ckey, all_cached)
+        log_telemetry("systemone_eval", {"cached": True, "latency_ms": 0.0, "tokens_saved": len(all_cached) * 50})
+        return all_cached
+
     payload = {
         "state": state,
         "model": "jev-latest",
-        "questions": questions
+        "questions": missing_questions
     }
 
     req = urllib.request.Request(
@@ -158,22 +196,23 @@ def evaluate_systemone(state: str | dict | list, questions: dict, timeout: float
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            answers = data.get("answers", {})
-            _save_cached_answer(ckey, answers)
+            new_answers = data.get("answers", {})
+            for q_id, ans in new_answers.items():
+                if q_id in missing_questions:
+                    qk = _q_key(norm_s, q_id, missing_questions[q_id])
+                    _MEM_Q_CACHE[qk] = (now, ans)
+
+            merged = {**all_cached, **new_answers}
+            _save_cached_answer(ckey, merged)
             latency = (time.perf_counter() - t0) * 1000.0
-            log_telemetry("systemone_eval", {"cached": False, "latency_ms": round(latency, 2), "tokens_used": 120})
-            return answers
+            log_telemetry("systemone_eval", {"cached": False, "latency_ms": round(latency, 2), "tokens_used": len(missing_questions) * 35})
+            return merged
     except Exception as err:
         log_telemetry("systemone_error", {"error": str(err)})
         return None
 
-def classify_task(prompt: str) -> dict | None:
-    """Padrão Oficial: Combina 3-Noul Gate, Bloco Temático Bimodal, Intenção e Guardrails (Fan-Out)."""
-    clean_prompt = prompt.strip()
-    if len(clean_prompt) < 4:
-        return None
-
-    questions = {
+def _build_classification_questions() -> dict:
+    return {
         "acts_on_system": {
             "type": "noul",
             "instructions": "Is the assistant being asked to act on files, code, database, tools or repositories, rather than only explain or advise?"
@@ -220,15 +259,7 @@ def classify_task(prompt: str) -> dict | None:
         }
     }
 
-    # Estado estruturado conforme concepts/state.md
-    state_payload = {
-        "request": clean_prompt
-    }
-
-    answers = evaluate_systemone(state_payload, questions, timeout=1.8)
-    if not answers:
-        return None
-
+def _parse_classification_answers(answers: dict) -> dict:
     act_score = answers.get("acts_on_system", {}).get("noul", 0.5)
     doc_score = answers.get("documented_procedure", {}).get("noul", 0.5)
     prose_score = answers.get("prose_suffices", {}).get("noul", 0.5)
@@ -241,13 +272,11 @@ def classify_task(prompt: str) -> dict | None:
     block_ans = answers.get("thematic_block", {})
     intent_ans = answers.get("intent", {})
 
-    # Análise Bimodal de Probabilidades (confidence.md) para detectar tarefas Multi-Stack
     probs = block_ans.get("probabilities", {})
     sorted_probs = sorted(probs.items(), key=lambda x: -x[1])
     top_block, top_p = sorted_probs[0] if sorted_probs else ("general-tools", 1.0)
     second_block, second_p = sorted_probs[1] if len(sorted_probs) > 1 else ("", 0.0)
 
-    # Multi-stack: quando os dois maiores blocos somam >= 0.70 e o segundo bloco tem peso relevante (>= 0.25)
     is_multistack = (top_p + second_p >= 0.70) and (second_p >= 0.25) and (top_block != "general-tools") and (second_block != "general-tools")
     active_blocks = [top_block, second_block] if is_multistack else [top_block]
 
@@ -269,6 +298,21 @@ def classify_task(prompt: str) -> dict | None:
         "intent": intent_ans.get("choice", "create"),
         "intent_confidence": round(intent_ans.get("confidence", 0.0), 2)
     }
+
+def classify_task(prompt: str) -> dict | None:
+    """Padrão Oficial: Combina 3-Noul Gate, Bloco Temático Bimodal, Intenção e Guardrails (Fan-Out)."""
+    clean_prompt = prompt.strip()
+    if len(clean_prompt) < 4:
+        return None
+
+    questions = _build_classification_questions()
+    state_payload = {"request": clean_prompt}
+
+    answers = evaluate_systemone(state_payload, questions, timeout=1.8)
+    if not answers:
+        return None
+
+    return _parse_classification_answers(answers)
 
 def get_skill_excerpt(sid: str, manifest: dict, max_chars: int = 700) -> str:
     """Carrega o excerpt real de SKILL.md (Progressive Disclosure - skill_suggestion.md)."""
@@ -297,23 +341,23 @@ def get_skill_excerpt(sid: str, manifest: dict, max_chars: int = 700) -> str:
                 pass
     return meta.get("description", meta.get("call_intent", sid))[:max_chars]
 
-def verify_shortlist_fit(prompt: str, candidate_ids: list[str], manifest: dict) -> tuple[str | None, dict[str, float], list[str]]:
-    """Progressive Disclosure: Injeta excerpt de SKILL.md e filtra aprovados com fit >= 0.30 (Cookbook Oficial)."""
-    if not candidate_ids:
-        return None, {}, []
-
-    shortlist = candidate_ids[:4]
+def _build_shortlist_questions(shortlist: list[str], manifest: dict) -> tuple[dict, dict]:
     criteria = {}
     questions = {}
-
     for sid in shortlist:
         meta_desc = manifest.get(sid, {}).get("description", "")[:120]
         excerpt = get_skill_excerpt(sid, manifest, max_chars=700)
         full_context = f"{meta_desc} — {excerpt}" if excerpt and excerpt != meta_desc else meta_desc
         criteria[sid] = full_context[:800]
+        # Padrão Oficial: Primitiva Score para avaliação graduada estável (Cookbook rerank/suggestion)
         questions[f"fits::{sid}"] = {
-            "type": "noul",
-            "instructions": f"Does the skill '{sid}' do the specific task the user is asking for? Skill documentation: {criteria[sid]}"
+            "type": "score",
+            "instructions": f"How well does the skill '{sid}' fulfill the user's specific request based on its documentation: {criteria[sid]}",
+            "criteria": [
+                "Completely unrelated or wrong technical domain for this task",
+                "Tangentially related or general domain, but does not provide specific procedures or tools for this exact request",
+                "Direct specific match, specifically intended to guide this exact task"
+            ]
         }
 
     if len(shortlist) > 1:
@@ -322,28 +366,82 @@ def verify_shortlist_fit(prompt: str, candidate_ids: list[str], manifest: dict) 
             "instructions": "Exactly one of these candidate skills is the right one to load for the user's latest request. Which one? Read what each actually does, not just its name.",
             "criteria": criteria
         }
+    return questions, criteria
 
-    # Estado estruturado
+def _parse_shortlist_answers(answers: dict, shortlist: list[str]) -> tuple[str | None, dict[str, float], list[str]]:
+    fits_scores = {}
+    for sid in shortlist:
+        ans = answers.get(f"fits::{sid}", {})
+        if "score" in ans:
+            # Score de 0 a 2 normalizado para escala 0.0 a 1.0
+            fits_scores[sid] = round(ans["score"] / 2.0, 2)
+        elif "noul" in ans:
+            fits_scores[sid] = round(ans["noul"], 2)
+        else:
+            fits_scores[sid] = 0.0
+
+    best_fit = max(fits_scores.values()) if fits_scores else 0.0
+    winner = answers.get("which", {}).get("choice") if "which" in answers else (shortlist[0] if shortlist else None)
+
+    # Limiar Oficial do Cookbook: Rejeição total se nada atingir 0.30
+    if best_fit < 0.30:
+        return None, fits_scores, []
+
+    approved = [sid for sid in shortlist if fits_scores.get(sid, 0.0) >= 0.30]
+    if winner and winner not in approved and approved:
+        winner = approved[0]
+
+    return winner, fits_scores, approved
+
+def verify_shortlist_fit(prompt: str, candidate_ids: list[str], manifest: dict) -> tuple[str | None, dict[str, float], list[str]]:
+    """Progressive Disclosure: Injeta excerpt de SKILL.md e avalia via Score Primitive."""
+    if not candidate_ids:
+        return None, {}, []
+
+    shortlist = candidate_ids[:4]
+    questions, _ = _build_shortlist_questions(shortlist, manifest)
     state_payload = {"request": prompt.strip()}
 
     answers = evaluate_systemone(state_payload, questions, timeout=2.0)
     if not answers:
         return candidate_ids[0], {}, candidate_ids
 
-    fits_scores = {}
-    for sid in shortlist:
-        fits_scores[sid] = round(answers.get(f"fits::{sid}", {}).get("noul", 0.0), 2)
+    return _parse_shortlist_answers(answers, shortlist)
 
-    best_fit = max(fits_scores.values()) if fits_scores else 0.0
-    winner = answers.get("which", {}).get("choice") if "which" in answers else shortlist[0]
+def classify_and_verify_speculative(prompt: str, candidate_ids: list[str], manifest: dict) -> dict:
+    """Speculative Fan-Out Oficial: Combina Classificação Geral e Verificação de Shortlist em 1 única chamada SystemOne (latência reduzida à metade)."""
+    clean_prompt = prompt.strip()
+    if len(clean_prompt) < 4:
+        return {"classification": None, "verification": (None, {}, [])}
 
-    # Limiar Oficial do Cookbook skill_suggestion.md: Rejeição total se nada atingir 0.30
-    if best_fit < 0.30:
-        return None, fits_scores, []
+    cls_questions = _build_classification_questions()
+    shortlist = candidate_ids[:4] if candidate_ids else []
+    sht_questions, _ = _build_shortlist_questions(shortlist, manifest) if shortlist else ({}, {})
 
-    # Retorna apenas os candidatos cujo fit individual seja satisfatório (>= 0.30)
-    approved = [sid for sid in shortlist if fits_scores.get(sid, 0.0) >= 0.30]
-    if winner and winner not in approved and approved:
-        winner = approved[0]
+    combined_questions = {**cls_questions, **sht_questions}
+    state_payload = {"request": clean_prompt}
 
-    return winner, fits_scores, approved
+    answers = evaluate_systemone(state_payload, combined_questions, timeout=2.2)
+    if not answers:
+        return {
+            "classification": None,
+            "verification": (candidate_ids[0] if candidate_ids else None, {}, candidate_ids)
+        }
+
+    # Popula cache para chamadas subsequentes isoladas
+    cls_answers = {k: answers[k] for k in cls_questions if k in answers}
+    if cls_answers:
+        _save_cached_answer(_cache_key(state_payload, cls_questions), cls_answers)
+
+    if sht_questions:
+        sht_answers = {k: answers[k] for k in sht_questions if k in answers}
+        if sht_answers:
+            _save_cached_answer(_cache_key(state_payload, sht_questions), sht_answers)
+
+    classification = _parse_classification_answers(cls_answers)
+    verification = _parse_shortlist_answers(answers, shortlist) if shortlist else (None, {}, [])
+
+    return {
+        "classification": classification,
+        "verification": verification
+    }

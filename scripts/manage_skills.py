@@ -406,21 +406,34 @@ def pin(ids: list[str]):
             pinned.add(sid)
         save_pinned(pinned)
         add(valid_ids)
+        try:
+            import typesafe_client
+            typesafe_client.log_feedback("user_manual_pin", ", ".join(valid_ids), override=True, details={"pinned": valid_ids})
+        except Exception:
+            pass
         print(f"[PIN] Skills fixadas: {', '.join(valid_ids)}")
 
 def unpin(ids: list[str]):
     pinned = get_pinned()
     manifest = get_manifest()
     session = load_session_state()
+    unpinned_ids = []
     for sid in ids:
         if sid in pinned:
             pinned.remove(sid)
             target_name = manifest.get(sid, {}).get("target", sid)
             remove_item(get_active_dir() / target_name)
             session.pop(target_name, None)
+            unpinned_ids.append(sid)
             print(f"[UNPIN] Desafixada e removida: {sid}")
     save_pinned(pinned)
     save_session_state(session)
+    if unpinned_ids:
+        try:
+            import typesafe_client
+            typesafe_client.log_feedback("user_manual_unpin", ", ".join(unpinned_ids), override=True, details={"unpinned": unpinned_ids})
+        except Exception:
+            pass
 
 def list_skills() -> list[str]:
     active = []

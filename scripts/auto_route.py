@@ -339,11 +339,17 @@ def detect_path_in_prompt(prompt: str) -> list[str]:
     seen = set()
     return [s for s in detected if not (s in seen or seen.add(s))]
 
-def detect_primary_block(prompt: str) -> str | list[str] | None:
-    """Classifica o domínio temático principal (Two-Tier Routing) com TypeSafe AI (Jev) e fallback heurístico."""
+def detect_primary_block(prompt: str, candidate_ids: list[str] = None) -> str | list[str] | None:
+    """Classifica o domínio temático principal (Two-Tier Routing) com TypeSafe AI (Jev) e fallback heurístico.
+    Quando candidate_ids é fornecido, executa Speculative Fan-Out em 1 única chamada HTTP."""
     try:
         import typesafe_client
-        res = typesafe_client.classify_task(prompt)
+        if candidate_ids:
+            manifest = get_index().manifest if get_index() else {}
+            spec = typesafe_client.classify_and_verify_speculative(prompt, candidate_ids, manifest)
+            res = spec.get("classification")
+        else:
+            res = typesafe_client.classify_task(prompt)
         if res and res.get("should_act"):
             block_map = {
                 "core-database": ["database"],
@@ -437,7 +443,9 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
 
     # 4. Two-Tier Routing: Dedução de Bloco Temático para eliminar ruído cruzado
     if not block and not category:
-        inferred_block = detect_primary_block(prompt)
+        index_quick = get_index()
+        preliminary_ids = [r[1] for r in index_quick.score(prompt)[:4]] if index_quick else []
+        inferred_block = detect_primary_block(prompt, preliminary_ids)
         if inferred_block:
             block = inferred_block
             print(f"[TWO-TIER] Domínio Classificado: '{block}'")

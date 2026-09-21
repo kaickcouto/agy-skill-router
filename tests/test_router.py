@@ -345,6 +345,29 @@ class TestSkillRouterRegression(unittest.TestCase):
         self.assertIn("typesafe_classify", mcp_server.TOOL_HANDLERS)
         self.assertIn("typesafe_evaluate", mcp_server.TOOL_HANDLERS)
 
+    def test_37_typesafe_speculative_fan_out(self):
+        """Verifica se classify_and_verify_speculative executa e extrai classificacao e verificacao em 1 chamada."""
+        import typesafe_client
+        if typesafe_client.get_api_key():
+            manifest = manage_skills.get_manifest()
+            res = typesafe_client.classify_and_verify_speculative(
+                "criar tabela no supabase com rls",
+                ["supabase", "docker-expert"],
+                manifest
+            )
+            self.assertIn("classification", res)
+            self.assertIn("verification", res)
+            winner, fits, approved = res["verification"]
+            self.assertEqual(winner, "supabase")
+            self.assertIn("supabase", approved)
+
+    def test_38_typesafe_feedback_logging(self):
+        """Verifica se log_feedback registra eventos de feedback / pinning do usuario."""
+        import typesafe_client
+        typesafe_client.log_feedback("test_prompt", "supabase", override=True, details={"reason": "test"})
+        lines = typesafe_client.TELEMETRY_FILE.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(any("feedback_event" in l and "test_prompt" in l for l in lines))
+
 if __name__ == '__main__':
     unittest.main()
 
