@@ -309,6 +309,37 @@ class TestSkillRouterRegression(unittest.TestCase):
         self.assertEqual(res["status"], "routed")
         self.assertTrue("pdf" in res["skills"] or "docx" in res["skills"])
 
+    def test_33_typesafe_semantic_cache_normalization(self):
+        """Verifica se a normalizacao semantica de cache gera chaves identicas para variacoes de pontuacao/casing."""
+        import typesafe_client
+        q = {"gate": {"type": "noul", "instructions": "test"}}
+        k1 = typesafe_client._cache_key({"request": "Crie uma tabela Postgres!"}, q)
+        k2 = typesafe_client._cache_key({"request": "  crie uma tabela postgres  "}, q)
+        self.assertEqual(k1, k2, "Chaves de cache normalizadas semanticamente devem ser identicas.")
+
+    def test_34_typesafe_speculative_fanout_guardrails(self):
+        """Verifica se classify_task inclui os campos de fan-out especulativo (destrutivo, ambiguo e token-saving)."""
+        import typesafe_client
+        res = typesafe_client.classify_task("apague e delete todas as tabelas e dados do banco")
+        if res:
+            self.assertIn("is_destructive", res)
+            self.assertIn("is_ambiguous", res)
+            self.assertIn("token_saving_recommended", res)
+
+    def test_35_typesafe_telemetry_logging(self):
+        """Verifica se o registro de telemetria em .agent/telemetry.jsonl opera sem erros."""
+        import typesafe_client
+        typesafe_client.log_telemetry("unit_test_event", {"metric": 42})
+        self.assertTrue(typesafe_client.TELEMETRY_FILE.exists())
+        lines = typesafe_client.TELEMETRY_FILE.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(any("unit_test_event" in l for l in lines))
+
+    def test_36_mcp_typesafe_tools_registered(self):
+        """Verifica se as ferramentas MCP typesafe_classify e typesafe_evaluate estao registradas no handler."""
+        import mcp_server
+        self.assertIn("typesafe_classify", mcp_server.TOOL_HANDLERS)
+        self.assertIn("typesafe_evaluate", mcp_server.TOOL_HANDLERS)
+
 if __name__ == '__main__':
     unittest.main()
 

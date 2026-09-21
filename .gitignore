@@ -12,6 +12,7 @@ _temp_sources/
 .agent/.openrouter_*.json
 .agent/.pre_agent_*
 .agent/.typesafe_cache.json
+.agent/telemetry.jsonl
 .agent/hooks.json
 repo_context.txt
 repomix-output.*

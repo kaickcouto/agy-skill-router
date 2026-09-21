@@ -601,6 +601,19 @@ def route(prompt: str, top_k: int = 2, threshold: float = 4.0, explain: bool = F
                 status_str = "[DESCARTADA] "
             print(f"  {status_str} Score: {score:5.2f} | ID: {sid:30} | Bloco: {cat:15} | Matches: {', '.join(matches)}")
 
+    try:
+        import typesafe_client
+        typesafe_client.log_telemetry("route_event", {
+            "prompt": prompt[:120],
+            "status": status,
+            "confidence": round(confidence, 2),
+            "skills": selected_ids,
+            "activated": activated,
+            "pinned": list(pinned)
+        })
+    except Exception:
+        pass
+
     return {
         "status": status,
         "confidence": round(confidence, 2),

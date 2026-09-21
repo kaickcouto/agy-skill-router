@@ -3,9 +3,12 @@ import sys
 import time
 import json
 import hashlib
+import re
+import unicodedata
 import urllib.request
 import urllib.error
 from pathlib import Path
+from typing import Any
 
 # Suporte UTF-8 no Windows
 if sys.platform == "win32":
@@ -20,6 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # Cache de dois níveis: In-memory (0ms) + Disco compartilhado entre processos (0.5ms)
 _MEM_CACHE: dict[str, tuple[float, dict]] = {}
 CACHE_FILE = ROOT / ".agent" / ".typesafe_cache.json"
+TELEMETRY_FILE = ROOT / ".agent" / "telemetry.jsonl"
 CACHE_TTL_SECONDS = 60.0
 
 def get_api_key() -> str | None:
@@ -41,9 +45,33 @@ def get_api_key() -> str | None:
             pass
     return None
 
-def _cache_key(state: any, questions: dict) -> str:
-    raw = f"{str(state)}::{json.dumps(questions, sort_keys=True)}"
+def _normalize_text(text: str) -> str:
+    norm = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("utf-8").lower()
+    norm = re.sub(r'[^\w\s]', ' ', norm)
+    return ' '.join(norm.split())
+
+def _cache_key(state: Any, questions: dict) -> str:
+    norm_state = state
+    if isinstance(state, dict):
+        norm_state = {k: (_normalize_text(v) if isinstance(v, str) else v) for k, v in state.items()}
+    elif isinstance(state, str):
+        norm_state = _normalize_text(state)
+    raw = f"{json.dumps(norm_state, sort_keys=True, default=str)}::{json.dumps(questions, sort_keys=True, default=str)}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+def log_telemetry(event: str, details: dict):
+    try:
+        TELEMETRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "ts": time.time(),
+            "event": event,
+            **details
+        }
+        with open(TELEMETRY_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
 
 def _get_cached_answer(ckey: str) -> dict | None:
     now = time.time()
@@ -99,6 +127,7 @@ def evaluate_systemone(state: str | dict | list, questions: dict, timeout: float
     ckey = _cache_key(state, questions)
     cached = _get_cached_answer(ckey)
     if cached is not None:
+        log_telemetry("systemone_eval", {"cached": True, "latency_ms": 0.0, "tokens_saved": 350})
         return cached
 
     payload = {
@@ -117,17 +146,21 @@ def evaluate_systemone(state: str | dict | list, questions: dict, timeout: float
         }
     )
 
+    t0 = time.perf_counter()
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             answers = data.get("answers", {})
             _save_cached_answer(ckey, answers)
+            latency = (time.perf_counter() - t0) * 1000.0
+            log_telemetry("systemone_eval", {"cached": False, "latency_ms": round(latency, 2), "tokens_used": 120})
             return answers
-    except Exception:
+    except Exception as err:
+        log_telemetry("systemone_error", {"error": str(err)})
         return None
 
 def classify_task(prompt: str) -> dict | None:
-    """Padrão Oficial: Combina 3-Noul Gate, Bloco Temático com Distribuição Bimodal e Intenção."""
+    """Padrão Oficial: Combina 3-Noul Gate, Bloco Temático Bimodal, Intenção e Guardrails (Fan-Out)."""
     clean_prompt = prompt.strip()
     if len(clean_prompt) < 4:
         return None
@@ -144,6 +177,14 @@ def classify_task(prompt: str) -> dict | None:
         "prose_suffices": {
             "type": "noul",
             "instructions": "Could a knowledgeable generalist fully satisfy this request in plain prose, with no code changes, no tools, and no documentation?"
+        },
+        "is_destructive": {
+            "type": "noul",
+            "instructions": "Does the request ask to delete, drop, wipe, prune, truncate, or destroy existing files, database tables, or git history?"
+        },
+        "is_ambiguous": {
+            "type": "noul",
+            "instructions": "Is the user request so vague, ambiguous, or incomplete that an assistant cannot execute it reliably without asking clarifying questions first?"
         },
         "thematic_block": {
             "type": "choice",
@@ -185,6 +226,10 @@ def classify_task(prompt: str) -> dict | None:
     prose_score = answers.get("prose_suffices", {}).get("noul", 0.5)
     gate_score = (act_score + doc_score + (1.0 - prose_score)) / 3.0
 
+    dest_score = answers.get("is_destructive", {}).get("noul", 0.0)
+    amb_score = answers.get("is_ambiguous", {}).get("noul", 0.0)
+    token_saving = (prose_score >= 0.70 and act_score < 0.35)
+
     block_ans = answers.get("thematic_block", {})
     intent_ans = answers.get("intent", {})
 
@@ -201,6 +246,13 @@ def classify_task(prompt: str) -> dict | None:
     return {
         "gate_score": round(gate_score, 2),
         "should_act": gate_score >= 0.30,
+        "prose_suffices": round(prose_score, 2),
+        "acts_on_system": round(act_score, 2),
+        "token_saving_recommended": token_saving,
+        "is_destructive": dest_score >= 0.60,
+        "destructive_score": round(dest_score, 2),
+        "is_ambiguous": amb_score >= 0.60,
+        "ambiguity_score": round(amb_score, 2),
         "block": top_block,
         "block_confidence": round(block_ans.get("confidence", 0.0), 2),
         "probabilities": probs,

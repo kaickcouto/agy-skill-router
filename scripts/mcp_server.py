@@ -249,6 +249,48 @@ TOOLS_DEFINITIONS = [
         "annotations": {
             "readOnlyHint": True
         }
+    },
+    {
+        "name": "typesafe_classify",
+        "description": "Executa avaliação ultrarrápida (System One) via TypeSafe Jev para classificar intenção, bloco temático, 3-Noul gate e detectar guardrails (destrutividade, ambiguidade ou modo de economia de tokens).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "Texto da solicitação do usuário para classificar."
+                }
+            },
+            "required": ["prompt"]
+        },
+        "annotations": {
+            "readOnlyHint": True
+        }
+    },
+    {
+        "name": "typesafe_evaluate",
+        "description": "Executa inferência com TypeSafe AI System One passando estado arbitrário e perguntas tipadas (Choice, Score, Noul), retornando probabilidades calibradas sem gastar tokens de geração.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "state": {
+                    "description": "Objeto, dicionário ou string representando o estado a ser avaliado."
+                },
+                "questions": {
+                    "type": "object",
+                    "description": "Dicionário de perguntas TypeSafe tipadas (Choice, Score ou Noul)."
+                },
+                "timeout": {
+                    "type": "number",
+                    "description": "Timeout máximo da requisição em segundos (padrão: 2.0).",
+                    "default": 2.0
+                }
+            },
+            "required": ["state", "questions"]
+        },
+        "annotations": {
+            "readOnlyHint": True
+        }
     }
 ]
 
@@ -479,6 +521,48 @@ def handle_lint_skill(arguments: dict) -> dict:
         ]
     }
 
+def handle_typesafe_classify(arguments: dict) -> dict:
+    prompt = arguments.get("prompt")
+    if not prompt:
+        raise ValueError("prompt é obrigatório.")
+    import typesafe_client
+    res = typesafe_client.classify_task(prompt)
+    if not res:
+        return {
+            "content": [{"type": "text", "text": "Classificador TypeSafe indisponível ou prompt curto."}],
+            "isError": True
+        }
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": json.dumps(res, ensure_ascii=False, indent=2)
+            }
+        ]
+    }
+
+def handle_typesafe_evaluate(arguments: dict) -> dict:
+    state = arguments.get("state")
+    questions = arguments.get("questions")
+    timeout = float(arguments.get("timeout", 2.0))
+    if state is None or not questions or not isinstance(questions, dict):
+        raise ValueError("state e questions (dict) são obrigatórios.")
+    import typesafe_client
+    answers = typesafe_client.evaluate_systemone(state, questions, timeout=timeout)
+    if answers is None:
+        return {
+            "content": [{"type": "text", "text": "TypeSafe System One não retornou respostas (sem API key ou timeout)."}],
+            "isError": True
+        }
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": json.dumps(answers, ensure_ascii=False, indent=2)
+            }
+        ]
+    }
+
 TOOL_HANDLERS = {
     "route_skills": handle_route_skills,
     "list_skills": handle_list_skills,
@@ -490,6 +574,8 @@ TOOL_HANDLERS = {
     "apply_preset": handle_apply_preset,
     "pre_agent_plan": handle_pre_agent_plan,
     "lint_skill": handle_lint_skill,
+    "typesafe_classify": handle_typesafe_classify,
+    "typesafe_evaluate": handle_typesafe_evaluate,
 }
 
 def send_json(data: dict):

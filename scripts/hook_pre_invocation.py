@@ -45,7 +45,6 @@ def should_trigger_pre_agent(prompt: str) -> bool:
         import typesafe_client
         res = typesafe_client.classify_task(prompt)
         if res:
-            # Limiar oficial do cookbook skill_suggestion.md: gate_score >= 0.30
             return bool(res.get("should_act"))
     except Exception:
         pass
@@ -89,9 +88,7 @@ def main():
     state_file = (ROOT / ".agent" / f".pre_agent_last_step_{conv_id}") if conv_id else STATE_FILE
 
     step_idx, user_prompt = get_unprocessed_user_request(transcript_path)
-
-    # Gating: ignora se for prompt trivial, casual ou não-técnico
-    if step_idx < 0 or not should_trigger_pre_agent(user_prompt):
+    if step_idx < 0:
         sys.stdout.write("{}\n")
         return
 
@@ -120,6 +117,44 @@ def main():
     except Exception:
         pass
 
+    # Avaliação rápida com TypeSafe System One (0ms em cache)
+    ts_eval = None
+    try:
+        import typesafe_client
+        ts_eval = typesafe_client.classify_task(user_prompt)
+    except Exception:
+        pass
+
+    # Guardrail 1: Economia de Tokens para dúvidas conceituais/explicativas
+    if ts_eval and ts_eval.get("token_saving_recommended"):
+        output = {
+            "injectSteps": [
+                {
+                    "ephemeralMessage": "> [!TIP]\n> **[PROTOCOLO DE ECONOMIA DE TOKENS ATIVO]**\n> Esta solicitação é puramente explicativa/conceitual. Responda em prosa direta e concisa. NÃO dispare ferramentas, varreduras de arquivos nem subagentes desnecessários."
+                }
+            ]
+        }
+        sys.stdout.write(json.dumps(output, ensure_ascii=False) + "\n")
+        return
+
+    # Guardrail 2: Alerta de Ambiguidade extrema para tarefas não-acionáveis
+    if ts_eval and ts_eval.get("is_ambiguous") and not ts_eval.get("should_act"):
+        output = {
+            "injectSteps": [
+                {
+                    "ephemeralMessage": "> [!WARNING]\n> **[ALERTA DE AMBIGUIDADE]**\n> A solicitação é vaga ou incompleta. Em vez de adivinhar o escopo e gastar tokens com código especulativo, alinhe os requisitos com o usuário primeiro."
+                }
+            ]
+        }
+        sys.stdout.write(json.dumps(output, ensure_ascii=False) + "\n")
+        return
+
+    # Gating: ignora se for prompt trivial, casual ou não-técnico
+    should_act = ts_eval.get("should_act") if ts_eval else should_trigger_pre_agent(user_prompt)
+    if not should_act and not should_trigger_pre_agent(user_prompt):
+        sys.stdout.write("{}\n")
+        return
+
     # Executa a decomposição técnica silenciando logs intermediários no stdout
     buf = io.StringIO()
     try:
@@ -134,10 +169,12 @@ def main():
         skills = res.get("activated_skills", [])
         model = res.get("model_used", "free-tier")
 
-        msg_lines = [
-            f"### [PRÉ-AGENTE TÉCNICO (Modelo: {model})]",
-            spec
-        ]
+        msg_lines = []
+        if ts_eval and ts_eval.get("is_destructive"):
+            msg_lines.append("> [!CAUTION]\n> **[GUARDRAIL DE SEGURANÇA: AÇÃO POTENCIALMENTE DESTRUTIVA]**\n> Detectada intenção de exclusão ou alteração profunda de dados/código. Exija confirmação explícita do usuário antes de prosseguir com remoções irreversíveis.\n")
+
+        msg_lines.append(f"### [PRÉ-AGENTE TÉCNICO (Modelo: {model})]")
+        msg_lines.append(spec)
         if skills:
             msg_lines.append(f"\n> [!NOTE]\n> Skills auto-injetadas em `.agent/skills/`: {', '.join(skills)}")
 
